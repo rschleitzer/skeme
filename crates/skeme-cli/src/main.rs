@@ -24,21 +24,47 @@ fn main() -> Result<()> {
     info!("Template: {}", args.template.display());
     info!("Input: {}", args.input.display());
 
-    // Phase 1 implementation will go here:
-    // 1. Parse XML with DTD validation
-    // 2. Create Scheme engine with primitives
-    // 3. Set variables from CLI
-    // 4. Load template
-    // 5. Process template
-    // 6. Generate output
+    // Step 1: Parse XML with DTD validation
+    info!("Parsing XML input: {}", args.input.display());
+    let parser = XmlParser::new();
+    let grove = parser
+        .parse_file(&args.input)
+        .context("Failed to parse XML input")?;
+    info!("XML parsed successfully");
 
-    // For now, just a placeholder
-    info!("Phase 1: Foundation - Implementation in progress");
+    // Step 2: Create Scheme engine with primitives
+    info!("Initializing Scheme engine");
+    let mut engine = SchemeEngine::new().context("Failed to create Scheme engine")?;
 
-    println!("Skeme CLI initialized successfully!");
+    // Step 3: Set variables from CLI
+    for (name, value) in &args.variables {
+        info!("Setting variable: {} = {}", name, value);
+        engine.set_variable(name.clone(), value.clone());
+    }
+
+    // Step 4: Make the grove root available to Scheme
+    // For now, we'll load the template and let it access the grove
+    // In a full implementation, we'd inject the root node into the Scheme environment
+    // TODO: Register the grove root as a global variable
+    info!("Grove root element: {}", grove.root().gi());
+
+    // Step 5: Load and execute template
+    info!("Loading template: {}", args.template.display());
+    engine
+        .load_file(args.template.to_str().unwrap())
+        .context("Failed to load template")?;
+    info!("Template executed successfully");
+
+    // Step 6: Output results
+    // For now, templates will handle their own output via make-entity
+    // In the future, we might capture the final sosofo and process it
+
+    println!("\nSkeme processing complete!");
     println!("Template: {}", args.template.display());
     println!("Input: {}", args.input.display());
-    println!("Variables: {:?}", args.variables);
+    if !args.variables.is_empty() {
+        println!("Variables: {:?}", args.variables);
+    }
 
     Ok(())
 }

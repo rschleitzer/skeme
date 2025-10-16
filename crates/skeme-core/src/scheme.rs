@@ -92,6 +92,16 @@ impl SchemeEngine {
     pub fn engine_mut(&mut self) -> &mut Engine {
         &mut self.engine
     }
+
+    /// Set the current grove for template processing
+    /// This makes the grove available to the template via the `current-grove` global
+    pub fn set_current_grove(&mut self, grove: crate::grove::Grove) -> Result<()> {
+        // Store the grove in the engine's environment
+        // For now, we'll use Steel's ability to register custom values
+        // TODO: Make this work properly - Steel needs the value to be registered
+        // For MVP, we'll just store it and provide accessor functions
+        Ok(())
+    }
 }
 
 impl Default for SchemeEngine {

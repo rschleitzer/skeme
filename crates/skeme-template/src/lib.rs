@@ -19,8 +19,6 @@ pub use processor::TemplateProcessor;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_module_availability() {
         // Basic smoke test

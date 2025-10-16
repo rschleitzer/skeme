@@ -45,6 +45,7 @@ impl fmt::Display for Quantity {
 /// DSSSL Color
 ///
 /// STUB: Not needed for plain text code generation
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Color {
     r: u8,
@@ -61,6 +62,7 @@ impl Color {
 /// DSSSL Address (for links and cross-references)
 ///
 /// STUB: Rarely used in code generation
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Address {
     target: String,
@@ -77,6 +79,7 @@ impl Address {
 /// DSSSL GlyphId (special character representation)
 ///
 /// STUB: Rarely used in code generation
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct GlyphId {
     name: String,

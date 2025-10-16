@@ -20,6 +20,8 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct Grove {
     /// The underlying XML document (kept alive)
+    /// This field is intentionally not accessed directly - its purpose is to keep the Document alive
+    #[allow(dead_code)]
     document: Arc<Document>,
     /// The root node
     root: Node,

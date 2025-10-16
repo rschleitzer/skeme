@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use skeme_cli::Args;
 use skeme_core::{SchemeEngine, XmlParser};
-use skeme_template::{TemplateLoader, TemplateProcessor};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -43,10 +42,11 @@ fn main() -> Result<()> {
     }
 
     // Step 4: Make the grove root available to Scheme
-    // For now, we'll load the template and let it access the grove
-    // In a full implementation, we'd inject the root node into the Scheme environment
-    // TODO: Register the grove root as a global variable
     info!("Grove root element: {}", grove.root().gi());
+    engine
+        .set_current_grove(grove)
+        .context("Failed to set current grove")?;
+    info!("Grove root registered as 'current-root' in Scheme");
 
     // Step 5: Load and execute template
     info!("Loading template: {}", args.template.display());

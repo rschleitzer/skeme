@@ -7,13 +7,15 @@
 //! - node-list, node-list-empty?, node-list-first, node-list-rest
 //! - select-elements, element-with-id
 
-use crate::grove::{Node, NodeList};
+use crate::grove::{Grove, Node, NodeList};
 use crate::scheme::SchemeEngine;
 use anyhow::Result;
-use steel::steel_vm::register_fn::RegisterFn;
 
 /// Register all grove query primitives
 pub fn register_grove_primitives(engine: &mut SchemeEngine) -> Result<()> {
+    // Grove accessors
+    engine.register_fn("grove-root", grove_root);
+
     // Node property accessors
     engine.register_fn("gi", grove_gi);
     engine.register_fn("id", grove_id);
@@ -35,6 +37,15 @@ pub fn register_grove_primitives(engine: &mut SchemeEngine) -> Result<()> {
     engine.register_fn("text?", grove_text_p);
 
     Ok(())
+}
+
+// ============================================================================
+// Grove Accessors
+// ============================================================================
+
+/// Get the root node from a grove
+fn grove_root(grove: &Grove) -> Node {
+    grove.root().clone()
 }
 
 // ============================================================================
@@ -115,8 +126,6 @@ fn grove_text_p(node: &Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_grove_primitives() {
         // Will test each primitive as implemented

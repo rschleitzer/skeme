@@ -4,11 +4,9 @@
 
 use crate::scheme::SchemeEngine;
 use anyhow::Result;
-use steel::steel_vm::register_fn::RegisterFn;
-use std::fs;
 
 /// Register all utility primitives
-pub fn register_util_primitives(engine: &mut SchemeEngine) -> Result<()> {
+pub fn register_util_primitives(_engine: &mut SchemeEngine) -> Result<()> {
     // Variable access
     // Note: We need to wrap get_variable in a closure to capture the engine reference
     // For now, we'll handle this differently - see SchemeEngine::register_variable_access

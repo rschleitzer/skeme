@@ -94,12 +94,24 @@ impl SchemeEngine {
     }
 
     /// Set the current grove for template processing
-    /// This makes the grove available to the template via the `current-grove` global
+    /// This makes the grove available to the template via `current-grove`
+    /// and the root node available via `current-root`
     pub fn set_current_grove(&mut self, grove: crate::grove::Grove) -> Result<()> {
-        // Store the grove in the engine's environment
-        // For now, we'll use Steel's ability to register custom values
-        // TODO: Make this work properly - Steel needs the value to be registered
-        // For MVP, we'll just store it and provide accessor functions
+        use steel::gc::Gc;
+        use steel::rvals::SteelVal;
+
+        // We need to keep the Grove (which owns the Document) alive
+        // So we'll register both the grove and provide a function to get the root
+
+        // Wrap the entire grove in a SteelVal
+        let grove_val = SteelVal::Custom(Gc::new_mut(Box::new(grove)));
+        self.engine.register_value("current-grove", grove_val);
+
+        // Now evaluate Scheme code to extract the root and make it available
+        // We'll do this by calling our grove-root primitive
+        let code = "(define current-root (grove-root current-grove))";
+        let _ = self.eval(code);
+
         Ok(())
     }
 }

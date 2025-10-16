@@ -36,6 +36,10 @@ pub fn register_grove_primitives(engine: &mut SchemeEngine) -> Result<()> {
     engine.register_fn("element?", grove_element_p);
     engine.register_fn("text?", grove_text_p);
 
+    // Node list filtering
+    engine.register_fn("select-elements", grove_select_elements);
+    engine.register_fn("descendants", grove_descendants);
+
     Ok(())
 }
 
@@ -122,6 +126,36 @@ fn grove_element_p(node: &Node) -> bool {
 /// Check if a node is a text node
 fn grove_text_p(node: &Node) -> bool {
     node.is_text()
+}
+
+// ============================================================================
+// Node List Filtering
+// ============================================================================
+
+/// Select elements with a specific GI from a node-list
+/// Usage: (select-elements node-list "field")
+fn grove_select_elements(nl: &NodeList, gi: String) -> NodeList {
+    let filtered: Vec<Node> = nl.iter()
+        .filter(|node| node.is_element() && node.gi() == gi)
+        .cloned()
+        .collect();
+    NodeList::from_vec(filtered)
+}
+
+/// Get all descendant nodes (depth-first traversal)
+/// Usage: (descendants node)
+fn grove_descendants(node: &Node) -> NodeList {
+    fn collect_descendants(node: &Node, acc: &mut Vec<Node>) {
+        let children = node.children();
+        for child in children.iter() {
+            acc.push(child.clone());
+            collect_descendants(child, acc);
+        }
+    }
+
+    let mut all_descendants = Vec::new();
+    collect_descendants(node, &mut all_descendants);
+    NodeList::from_vec(all_descendants)
 }
 
 #[cfg(test)]

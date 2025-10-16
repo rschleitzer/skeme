@@ -43,7 +43,8 @@ More comprehensive demonstration:
 
 ## Available Primitives
 
-### Grove Primitives (14)
+### Grove Primitives (17)
+- `grove-root` - Get root node from grove
 - `gi` - Get element name
 - `id` - Get ID attribute
 - `data` - Get text content
@@ -56,13 +57,16 @@ More comprehensive demonstration:
 - `node-list-length` - Get node list length
 - `element?` - Check if element node
 - `text?` - Check if text node
+- `select-elements` - Filter node-list by element name
+- `descendants` - Get all descendant nodes (depth-first)
 
-### Processing Primitives (5)
+### Processing Primitives (6)
 - `literal` - Create text sosofo
 - `empty-sosofo` - Create empty sosofo
 - `sosofo-append` - Combine sosofos
 - `make-entity` - Create entity flow object (file output)
 - `make-formatting-instruction` - Create formatting instruction (text output)
+- `write-sosofo` - Write sosofo to its associated file
 
 ### R5RS Scheme (via Steel)
 All R5RS primitives are available:
@@ -71,50 +75,69 @@ All R5RS primitives are available:
 - Arithmetic: `+`, `-`, `*`, `/`, etc.
 - I/O: `display`, `newline`, etc.
 
-## Current Limitations
+## Working Features ✓
 
-**Phase 1 MVP** - The following features are not yet implemented:
+- **Grove navigation** - Full XML tree navigation with 17 primitives
+- **File output** - `make-entity` + `write-sosofo` write generated code to files
+- **DTD validation** - libxml2 parses and validates against DTDs
+- **Template search paths** - `-D dir` flag to specify template directories
+- **Variables** - `-V key=value` flags injected as Scheme variables
+- **Auto directory creation** - Output directories created automatically
 
-1. **Grove access from templates** - Templates cannot yet navigate the parsed XML tree. The grove is parsed but not exposed to Scheme.
+## Known Limitations
 
-2. **File output** - `make-entity` is defined but doesn't actually write files yet.
+1. **Load primitive** - `load` for loading helper libraries not yet implemented
+   - Workaround: Use Steel's module system or inline helpers
 
-3. **Process-children** - Context-dependent processing primitives not yet implemented.
+2. **Process-children** - Context-dependent processing not yet implemented
+   - Workaround: Use `children` + `select-elements` + `map`
 
-4. **DTD validation** - libxml2 DTD validation is wired up but not yet fully tested.
+3. **Advanced grove primitives** - Some DSSSL primitives not yet implemented:
+   - `element-with-id`, `ancestor`, `preced`, `follow`, etc.
+   - XPath support would be nice but not in DSSSL spec
 
-## Next Steps (Phase 2)
+## Next Steps
 
-- Inject parsed grove into Scheme environment
-- Implement actual file writing from `make-entity`
-- Add `process-children` and processing context
-- Implement more grove primitives (select-elements, element-with-id, etc.)
-- Add template search paths (`-D` option)
-- Implement `load` primitive for loading helper libraries
+- Implement `load` primitive for modular templates
+- Add `process-children` for context-dependent processing
+- More grove primitives as needed
+- Performance optimization for large documents
 
 ## Template Structure
 
 A typical Skeme template:
 
 ```scheme
-;; Load helper libraries (when implemented)
-;; (load "lib/helpers.scm")
+;; Access the XML root (automatically available as current-root)
+(define class-node current-root)
+(define class-name (attribute-string class-node "name"))
+
+;; Navigate the XML tree
+(define all-children (children class-node))
+(define fields (select-elements all-children "field"))
+(define methods (select-elements all-children "method"))
 
 ;; Access CLI variables
 ;; Passed with: -V outdir=generated -V package=com.example
-;; Available as: outdir, package
+;; Available in Scheme as: outdir, package
 
-;; Process the grove (when implemented)
-;; (define root (current-grove))
-;; (define sections (select-elements root "section"))
+;; Generate code
+(define code (string-append
+  "package " package ";\n\n"
+  "public class " class-name " {\n"
+  "  // Generated code\n"
+  "}\n"))
 
-;; Generate output
-(define content (literal "Generated code here"))
-(make-entity "output.txt" content)
+;; Write to file
+(define output-file (string-append outdir "/" class-name ".java"))
+(define output-sosofo (make-entity output-file (literal code)))
+(write-sosofo output-sosofo)
 
 ;; Return success
 #t
 ```
+
+See `examples/codegen-improved.scm` for a complete working example.
 
 ## Testing
 

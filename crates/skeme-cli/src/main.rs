@@ -35,6 +35,12 @@ fn main() -> Result<()> {
     info!("Initializing Scheme engine");
     let mut engine = SchemeEngine::new().context("Failed to create Scheme engine")?;
 
+    // Step 2.5: Add search directories from CLI
+    for dir in &args.search_dirs {
+        info!("Adding search directory: {}", dir.display());
+        engine.add_search_path(dir.clone());
+    }
+
     // Step 3: Set variables from CLI
     for (name, value) in &args.variables {
         info!("Setting variable: {} = {}", name, value);

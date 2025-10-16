@@ -13,6 +13,7 @@ use crate::primitives;
 pub struct SchemeEngine {
     pub(crate) engine: Engine,
     variables: HashMap<String, String>,
+    search_paths: Vec<std::path::PathBuf>,
 }
 
 impl SchemeEngine {
@@ -23,6 +24,7 @@ impl SchemeEngine {
         let mut scheme_engine = Self {
             engine,
             variables: HashMap::new(),
+            search_paths: vec![std::env::current_dir()?],  // Default: current directory
         };
 
         // Register all DSSSL primitives
@@ -61,14 +63,49 @@ impl SchemeEngine {
         self.variables.get(name).map(|s| s.as_str())
     }
 
+    /// Add a template search directory
+    pub fn add_search_path(&mut self, path: std::path::PathBuf) {
+        if !self.search_paths.contains(&path) {
+            self.search_paths.push(path);
+        }
+    }
+
+    /// Find a file in the search paths
+    fn find_in_search_paths(&self, filename: &str) -> Option<std::path::PathBuf> {
+        use std::path::Path;
+
+        // If it's an absolute path or contains path separators, use it directly
+        let path = Path::new(filename);
+        if path.is_absolute() || filename.contains('/') || filename.contains('\\') {
+            if path.exists() {
+                return Some(path.to_path_buf());
+            }
+            return None;
+        }
+
+        // Search in each search path
+        for search_dir in &self.search_paths {
+            let candidate = search_dir.join(filename);
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+
+        None
+    }
+
     /// Load and evaluate a Scheme file
     pub fn load_file(&mut self, path: &str) -> Result<()> {
-        let contents = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to read Scheme file: {}", path))?;
+        // Try to find the file in search paths
+        let file_path = self.find_in_search_paths(path)
+            .ok_or_else(|| anyhow::anyhow!("File not found in search paths: {}", path))?;
+
+        let contents = std::fs::read_to_string(&file_path)
+            .with_context(|| format!("Failed to read Scheme file: {}", file_path.display()))?;
 
         self.engine
             .compile_and_run_raw_program(contents)
-            .map_err(|e| anyhow::anyhow!("Scheme error in {}: {:?}", path, e))?;
+            .map_err(|e| anyhow::anyhow!("Scheme error in {}: {:?}", file_path.display(), e))?;
 
         Ok(())
     }

@@ -41,6 +41,12 @@ fn main() -> Result<()> {
         engine.add_search_path(dir.clone());
     }
 
+    // Step 2.6: Add template's directory to search paths automatically
+    if let Some(template_dir) = args.template.parent() {
+        info!("Adding template directory to search paths: {}", template_dir.display());
+        engine.add_search_path(template_dir.to_path_buf());
+    }
+
     // Step 3: Set variables from CLI
     for (name, value) in &args.variables {
         info!("Setting variable: {} = {}", name, value);

@@ -115,6 +115,15 @@ impl Node {
     pub fn is_text(&self) -> bool {
         self.inner.is_text_node()
     }
+
+    /// Check pointer equality (same node in memory)
+    pub fn ptr_eq(&self, other: &Node) -> bool {
+        // Compare underlying xmlNode pointers
+        std::ptr::eq(
+            self.inner.node_ptr() as *const (),
+            other.inner.node_ptr() as *const ()
+        )
+    }
 }
 
 // Implement Steel's Custom trait for Node

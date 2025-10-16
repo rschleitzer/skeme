@@ -74,6 +74,23 @@ const PRELUDE: &str = r#"
   "Check if node-list contains a specific node"
   (node-list-some (lambda (n) (equal? n node)) nl))
 
+(define (node-list-last nl)
+  "Get the last node in a node-list"
+  (if (node-list-empty? nl)
+      nl  ; Return empty node-list
+      (let ((rest (node-list-rest nl)))
+        (if (node-list-empty? rest)
+            (node-list-first nl)
+            (node-list-last rest)))))
+
+(define (node-list=? nl1 nl2)
+  "Check if two node-lists are equal"
+  (cond
+    ((and (node-list-empty? nl1) (node-list-empty? nl2)) #t)
+    ((or (node-list-empty? nl1) (node-list-empty? nl2)) #f)
+    (else (and (equal? (node-list-first nl1) (node-list-first nl2))
+               (node-list=? (node-list-rest nl1) (node-list-rest nl2))))))
+
 ;; ============================================================================
 ;; DSSSL Construction Rules System with MODES
 ;; ============================================================================
@@ -171,7 +188,7 @@ const PRELUDE: &str = r#"
 ;; make macro: (make flow-class characteristics... content...)
 ;; Simplified for code generation - characteristics are keyword: value pairs
 (define-syntax make
-  (syntax-rules (sequence entity system-id:)
+  (syntax-rules (sequence entity system-id: formatting-instruction data:)
     ;; (make sequence content...) - just concatenate sosofos
     ((make sequence content ...)
      (sosofo-append content ...))
@@ -179,6 +196,10 @@ const PRELUDE: &str = r#"
     ;; (make entity system-id: "file.txt" content...)
     ((make entity system-id: filename content ...)
      (make-entity filename (sosofo-append content ...)))
+
+    ;; (make formatting-instruction data: content)
+    ((make formatting-instruction data: content)
+     (make-formatting-instruction content))
 
     ;; Fallback: treat as sequence
     ((make flow-class content ...)

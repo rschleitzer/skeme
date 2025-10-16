@@ -50,6 +50,9 @@ pub fn register_grove_primitives(engine: &mut SchemeEngine) -> Result<()> {
     // Element lookup
     engine.register_fn("element-with-id", grove_element_with_id);
 
+    // Child numbering
+    engine.register_fn("child-number", grove_child_number);
+
     Ok(())
 }
 
@@ -226,6 +229,28 @@ fn grove_element_with_id(grove: &Grove, id: String) -> Option<Node> {
     }
 
     search_for_id(&grove.root(), &id)
+}
+
+/// Get the 1-based index of a node among its siblings
+/// Usage: (child-number node)
+fn grove_child_number(node: &Node) -> usize {
+    // Get the parent
+    if let Some(parent) = node.parent() {
+        let siblings = parent.children();
+
+        // Find the index of this node among siblings (1-based)
+        for (i, sibling) in siblings.iter().enumerate() {
+            if sibling.ptr_eq(node) {
+                return i + 1;  // 1-based index
+            }
+        }
+
+        // Should not reach here if node is actually a child of parent
+        1
+    } else {
+        // Root node - return 1
+        1
+    }
 }
 
 #[cfg(test)]

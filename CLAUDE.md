@@ -9,11 +9,13 @@
 1. [Project Overview](#project-overview)
 2. [Motivation & History](#motivation--history)
 3. [DSSSL Lineage](#dsssl-lineage)
-4. [Feature Matrix](#feature-matrix)
-5. [Technical Stack](#technical-stack)
-6. [CLI Design](#cli-design)
-7. [Distribution Strategy](#distribution-strategy)
-8. [Implementation Notes](#implementation-notes)
+4. [OpenJade Analysis](#openjade-analysis)
+5. [Primitive Catalog](#primitive-catalog)
+6. [Feature Matrix](#feature-matrix)
+7. [Technical Stack](#technical-stack)
+8. [CLI Design](#cli-design)
+9. [Distribution Strategy](#distribution-strategy)
+10. [Implementation Roadmap](#implementation-roadmap)
 
 ---
 
@@ -133,37 +135,372 @@ Simplified subset of DSSSL proposed for web use:
 
 ---
 
+## OpenJade Analysis
+
+**Source**: Analyzed actual OpenJade 1.3.2 codebase (April 2003)
+
+### Codebase Size
+
+**Total: ~72,000 lines of C++** across 117 files
+
+**Key components:**
+- `style/` (39,135 lines) - DSSSL interpreter, Scheme evaluator, primitives
+- `jade/` (20,641 lines) - FOT builders (HTML, RTF, TeX, MIF, **SGML backend**)
+- `spgrove/` (7,006 lines) - OpenSP grove integration
+- `grove/` (2,393 lines) - Grove model
+- `include/` (48 lines) - Headers (depends on external OpenSP library)
+
+**Critical files for Skeme:**
+- `style/primitive.h` - **224 Scheme primitives** defined
+- `style/primitive.cxx` - 5,704 lines - Primitive implementations
+- `style/Interpreter.cxx` - 2,390 lines - Scheme interpreter core
+- `style/SchemeParser.cxx` - ~2,300 lines - S-expression parser
+- `jade/SgmlFOTBuilder.cxx` - 2,824 lines - **SGML backend implementation**
+- `grove/Node.{h,cxx}` - ~2,400 lines - Grove node interface
+
+### OpenSP Dependency
+
+**Important discovery**: OpenJade does NOT include OpenSP sources!
+
+- OpenSP was split from OpenJade in 2002 (version 1.3.2)
+- OpenJade's `configure` looks for external OpenSP installation
+- OpenSP is ~100-150K lines of C++ (SGML/XML parser)
+- Skeme replaces OpenSP with **libxml2** (XML only, DTD validation included)
+
+### What Skeme Must Implement
+
+From OpenJade analysis, Skeme needs:
+
+1. **224 Scheme primitives** (detailed below)
+   - ~90 from R5RS (Steel provides)
+   - ~104 DSSSL-specific (implement in Rust)
+   - ~30 DSSSL types (stubs only - not needed for code generation)
+2. **Grove query engine** (~50 core primitives)
+3. **Processing & output** (~20 primitives for text generation)
+4. **SGML backend concept** (simplified: only `entity` + `formatting-instruction` flow objects)
+5. **R5RS Scheme interpreter** (use Steel, not port)
+6. **Template file parser** (pure .scm files, no SGML wrapper)
+
+**Key simplification**: User only generates plain text code files (`.java`, `.rs`, etc.), not styled documents. This eliminates ~30 primitives (quantities, colors, spacing) - implement as stubs.
+
+### What Skeme Does NOT Need
+
+- ❌ OpenSP parser (use libxml2 instead)
+- ❌ Other FOT builders (HTML, RTF, TeX, MIF)
+- ❌ DSSSL style language (flow objects, characteristics for document formatting)
+- ❌ SGML-wrapped template parsing (`<style-specification>`)
+- ❌ Document rendering features
+
+---
+
+## Primitive Catalog
+
+**Total primitives in OpenJade**: 224 (from `style/primitive.h`)
+
+### Steel Provides (R5RS Standard): ~90 primitives ✓
+
+These are **already implemented** in Steel Scheme:
+
+**Lists & Pairs** (15):
+- `cons`, `car`, `cdr`, `list`, `append`, `reverse`, `length`
+- `list-tail`, `list-ref`, `member`, `memv`, `assoc`
+- `null?`, `pair?`, `list?`
+
+**Strings** (14):
+- `string`, `string-length`, `string=?`, `string<?`, `string<=?`
+- `string-append`, `string-ref`, `substring`
+- `symbol->string`, `string->symbol`
+- `string->list`, `list->string`
+
+**Numbers & Math** (42):
+- Arithmetic: `+`, `-`, `*`, `/`, `quotient`, `remainder`, `modulo`
+- Comparison: `=`, `<`, `>`, `<=`, `>=`
+- Functions: `min`, `max`, `floor`, `ceiling`, `truncate`, `round`, `abs`
+- Transcendental: `sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `expt`
+- Conversions: `number->string`, `string->number`, `exact->inexact`, `inexact->exact`
+
+**Predicates** (14):
+- `symbol?`, `boolean?`, `procedure?`, `string?`, `char?`
+- `number?`, `integer?`, `real?`
+- `exact?`, `inexact?`, `zero?`, `positive?`, `negative?`, `odd?`, `even?`
+
+**Logic & Comparison** (3):
+- `not`, `equal?`, `eqv?`
+
+**Characters** (5):
+- `char=?`, `char<?`, `char<=?`, `char-upcase`, `char-downcase`
+
+**Vectors (R5RS)** (8):
+- `vector?`, `vector`, `vector-ref`, `vector-set!`
+- `make-vector`, `vector->list`, `list->vector`, `vector-fill!`
+
+### Skeme Must Implement: ~134 primitives
+
+Organized by priority and function:
+
+#### **CRITICAL: Grove Query Functions** (~50 primitives)
+
+XML tree navigation and querying:
+
+```scheme
+;; Current context
+(current-node)                              ; Current node being processed
+
+;; Node list operations
+(node-list? obj)                            ; Is this a node list?
+(node-list-empty? nl)                       ; Is node list empty?
+(node-list-first nl)                        ; First node
+(node-list-rest nl)                         ; Rest of list
+(node-list nl ...)                          ; Create node list
+(node-list-length nl)                       ; Length
+(node-list-ref nl n)                        ; Get nth node
+(node-list-reverse nl)                      ; Reverse
+(node-list-map proc nl)                     ; Map over nodes
+(node-list=? nl1 nl2)                       ; Compare
+(empty-node-list)                           ; Empty list
+
+;; Node properties
+(gi [node])                                 ; Element name (GI = Generic Identifier)
+(id [node])                                 ; ID attribute
+(data node)                                 ; Text content
+(node-property propname node [default])     ; Get property
+
+;; Tree navigation
+(parent [node])                             ; Parent node
+(ancestor gi [node])                        ; Ancestor with GI
+(children node)                             ; Child nodes
+(descendants node)                          ; All descendants
+(follow node)                               ; Following siblings
+(preced node)                               ; Preceding siblings
+(attributes node)                           ; Attribute nodes
+
+;; Selection & filtering
+(select-elements nl patterns)               ; Select by patterns
+(select-by-class nl class)                  ; Select by class
+(element-with-id id [node])                 ; Find by ID
+(match-element? pattern node)               ; Pattern match
+
+;; Attributes
+(attribute-string name [node])              ; Get attribute value
+(inherited-attribute-string name [node])    ; Inherited attribute
+(inherited-element-attribute-string gi name [node]) ; From ancestor
+
+;; Position predicates
+(first-sibling? [node])                     ; Is first sibling?
+(last-sibling? [node])                      ; Is last sibling?
+(absolute-first-sibling? [node])            ; Absolutely first?
+(absolute-last-sibling? [node])             ; Absolutely last?
+(have-ancestor? gi [node])                  ; Has ancestor?
+
+;; Numbering (for auto-numbering)
+(child-number [node])                       ; Position among siblings
+(ancestor-child-number gi [node])           ; Ancestor position
+(element-number [node])                     ; Number of this type
+(element-number-list gi-list [node])        ; Multi-level numbering
+(hierarchical-number gi-list [node])        ; Hierarchical (1.2.3)
+(hierarchical-number-recursive gi [node])   ; Recursive hierarchical
+(first-child-gi [node])                     ; GI of first child
+
+;; Entity operations
+(entity-system-id name [node])              ; Entity system ID
+(entity-public-id name [node])              ; Entity public ID
+(entity-generated-system-id name [node])    ; Generated system ID
+(entity-text name [node])                   ; Entity text
+(entity-notation name [node])               ; Entity notation
+(entity-type name [node])                   ; Entity type
+(entity-attribute-string name attr [node])  ; Entity attribute
+
+;; Notation operations
+(notation-system-id name [node])            ; Notation system ID
+(notation-public-id name [node])            ; Notation public ID
+(notation-generated-system-id name [node])  ; Generated system ID
+
+;; Name normalization
+(general-name-normalize name [node])        ; Normalize name
+(entity-name-normalize name [node])         ; Normalize entity name
+```
+
+#### **HIGH: Processing & Sosofo** (~20 primitives)
+
+Control code generation flow:
+
+```scheme
+;; Processing control
+(process-children)                          ; Process child nodes
+(process-children-trim)                     ; Process, trim whitespace
+(process-node-list nl)                      ; Process node list
+(process-element-with-id id)                ; Process by ID
+(process-matching-children patterns ...)    ; Process matching children
+(process-first-descendant patterns ...)     ; Process first descendant
+(next-match [style])                        ; Continue to next rule
+
+;; Sosofo (Specification of Sequence of Flow Objects)
+(sosofo? obj)                               ; Is sosofo?
+(empty-sosofo)                              ; Empty sosofo
+(sosofo-append sosofo ...)                  ; Append sosofos
+(literal str ...)                           ; Output literal text
+(sosofo-label label sosofo)                 ; Label sosofo
+(sosofo-discard-labeled label sosofo)       ; Discard labeled
+
+;; Formatting
+(format-number n format)                    ; Format number (I, II, III, 1, 2, 3, a, b, c)
+(format-number-list nums sep format)        ; Format list (1.2.3)
+
+;; Page numbers (may not need for code generation)
+(current-node-page-number-sosofo)           ; Current page number
+(page-number-sosofo)                        ; Page number sosofo
+```
+
+#### **MEDIUM: DSSSL Types** (~30 primitives) - **MOSTLY STUBS**
+
+**User's use case**: Only `entity` and `formatting-instruction` flow objects for plain text code generation.
+
+**Result**: Most DSSSL types are **NOT NEEDED**. Implement as stubs returning defaults.
+
+```scheme
+;; Quantities (12pt, 2em, etc.) - ❌ NOT NEEDED (document layout)
+(quantity? obj)                             ; Stub: always #f
+(table-unit n)                              ; Stub: return simple wrapper
+(quantity->number q)                        ; Stub: return 0
+(quantity->string q [unit])                 ; Stub: return "0"
+
+;; Spacing - ❌ NOT NEEDED (typographic layout)
+(display-space? obj)                        ; Stub: always #f
+(display-space min [opt max])               ; Stub: return dummy object
+(inline-space? obj)                         ; Stub: always #f
+(inline-space min [opt max])                ; Stub: return dummy object
+(display-size)                              ; Stub: return (0 0)
+
+;; Colors - ❌ NOT NEEDED (no styling in plain code files)
+(color? obj)                                ; Stub: always #f
+(color colorspace components ...)           ; Stub: return dummy object
+(color-space? obj)                          ; Stub: always #f
+(color-space name)                          ; Stub: return dummy object
+
+;; Addresses - 🔸 MAYBE (cross-references in docs?)
+(address? obj)                              ; Stub: always #f
+(address-local? addr)                       ; Stub: always #t
+(address-visited? addr)                     ; Stub: always #f
+(current-node-address)                      ; Could return node ID if needed
+(idref-address idref)                       ; Stub: return dummy
+(entity-address name)                       ; Stub: return dummy
+(sgml-document-address sysid docgi)         ; Stub: return dummy
+(node-list-address nl)                      ; Stub: return dummy
+
+;; Glyphs - 🔸 MAYBE (special chars in identifiers?)
+(glyph-id? obj)                             ; Stub: always #f
+(glyph-id pubid str)                        ; Stub: return dummy
+(glyph-subst-table? obj)                    ; Stub: always #f
+(glyph-subst-table alist)                   ; Stub: return dummy
+(glyph-subst glyph table)                   ; Stub: return glyph unchanged
+
+;; Character properties - 🔸 MAYBE (char classification)
+(char-property char prop [lang])            ; Could implement for case conversion
+(char-script-case char default ...)         ; Stub: return default
+```
+
+**Implementation priority**: All stubs initially (1-2 days), implement properly only if actually used in templates.
+
+#### **LOW: Extensions & Utilities** (~20 primitives)
+
+OpenJade-specific or less common:
+
+```scheme
+;; Keywords
+(keyword? obj)                              ; Is keyword?
+(keyword->string kw)                        ; To string
+(string->keyword str)                       ; From string
+
+;; Time
+(time)                                      ; Current time
+(time->string time [format])                ; Format time
+(time<? t1 t2)                              ; Compare
+(time>? t1 t2)
+(time<=? t1 t2)
+(time>=? t1 t2)
+
+;; Language
+(language? obj)                             ; Is language?
+(current-language)                          ; Get current
+(with-language lang proc)                   ; Execute with language
+(language code country)                     ; External proc
+
+;; Style
+(style? obj)                                ; Is style?
+(merge-style styles ...)                    ; Merge styles
+(map-constructor name proc)                 ; Map constructor
+
+;; Parsing
+(sgml-parse sysid [args ...])               ; Parse document
+
+;; Debug/error
+(error msg)                                 ; Signal error
+(external-procedure name)                   ; Get external proc
+(read-entity name)                          ; Read entity
+(debug obj)                                 ; Debug output
+
+;; Named node lists (rarely used)
+(named-node-list? obj)
+(named-node name nnl)
+(named-node-list-names nnl)
+(named-node-list-normalize nnl names norm)
+(node-list-no-order nl)
+(node-list-error msg default)
+
+;; Page conditionals
+(if-first-page then else)                   ; First page?
+(if-front-page then else)                   ; Front page?
+(all-element-number [node])                 ; All element numbers
+
+;; HyTime
+(hytime-linkend)                            ; HyTime linkend
+
+;; String utilities
+(string-equiv? s1 s2 lang)                  ; Language-aware compare
+```
+
+---
+
 ## Feature Matrix
 
 What Skeme implements from each ancestor:
 
 ### From DSSSL Standard (ISO 10179)
 
-**Core Expression Language:**
-- ✅ R4RS Scheme subset (side-effect-free)
-- ✅ Basic data types (lists, strings, numbers, booleans)
-- ✅ Procedures (`define`, `lambda`, `let`, `letrec`)
+**Core Expression Language** - ✅ Via Steel Scheme:
+- ✅ R5RS Scheme (superset of R4RS/DSSSL)
+- ✅ ~90 standard procedures (lists, strings, math, predicates)
+- ✅ Basic data types (lists, strings, numbers, booleans, vectors)
+- ✅ Procedures (`define`, `lambda`, `let`, `letrec`, `let*`)
 - ✅ Conditionals (`if`, `cond`, `case`)
-- ✅ List operations (`cons`, `car`, `cdr`, `map`, etc.)
-- ✅ String operations
-- ✅ Math operations
+- ✅ Comments (line `;` and block `#| ... |#`)
 
 **NOT implementing (document formatting):**
-- ❌ Flow objects
-- ❌ Style specifications
-- ❌ Formatting characteristics
+- ❌ Flow objects for document rendering
+- ❌ Style specifications for pagination
+- ❌ Formatting characteristics (fonts, spacing for print)
 - ❌ SPDL output
 
-**Partial implementation:**
-- 🔸 Grove model (simplified for code generation)
-- 🔸 SDQL concepts (adapted for XML navigation)
+**Grove Model** - ✅ Complete implementation:
+- ✅ ~50 grove query primitives
+- ✅ XML tree navigation (parent, children, ancestors, descendants)
+- ✅ Node properties (GI, ID, attributes, data)
+- ✅ Pattern matching and selection
+- ✅ Entity and notation access
 
 ### From Jade/OpenJade
 
-**Core Features:**
+**Scheme Primitives** - ✅ Complete compatibility:
+- ✅ All 224 OpenJade primitives
+- ✅ ~90 from R5RS (Steel provides)
+- ✅ ~134 DSSSL-specific (Skeme implements)
+
+**Processing & Code Generation:**
 - ✅ `load` procedure (OpenJade extension, not DSSSL standard)
-- ✅ SGML backend concept (adapted to XML)
+- ✅ SGML backend concept (text output generation)
 - ✅ Template-based code generation
+- ✅ Processing control (`process-children`, `process-node-list`, etc.)
+- ✅ Sosofo operations (`literal`, `sosofo-append`, etc.)
 - ✅ External procedures (Rust functions callable from Scheme)
 
 **CLI Compatibility:**
@@ -171,12 +508,13 @@ What Skeme implements from each ancestor:
 - ✅ `-V` variable definitions
 - ✅ `-D` search directories
 - ✅ `-t` backend selection: text, xml
-- ❌ `-o` output file (template controls output)
+- ❌ `-o` output file (template controls output via `write-file`)
 
 **NOT implementing:**
-- ❌ Document formatting backends (RTF, TeX, MIF)
+- ❌ Document formatting backends (RTF, TeX, MIF, HTML)
 - ❌ SPDL generation
 - ❌ Full SGML parsing (XML only, via libxml2)
+- ❌ SGML-wrapped templates (`<style-specification>` format)
 
 ### Skeme-Specific Features
 
@@ -552,47 +890,253 @@ skeme -d codegen.scm grammar.xml
 
 ---
 
-## Development Workflow
+## Implementation Roadmap
 
-### Using Claude Code
+### Overview
 
-**Initial setup:**
+**Total scope**: ~134 Rust functions to implement (~104 real + ~30 stubs) + integration code
 
-- Set up Skeme workspace with three crates:
-- skeme-core: libxml2 + Steel integration
-- skeme-template: Template engine
-- skeme-cli: CLI interface
-- Dependencies: libxml2, Steel, clap"
+**Estimated timeline**: 3-6 months (solo, experienced Rust developer)
 
-**Incremental development:**
+**Key simplification**: User only uses `entity` + `formatting-instruction` flow objects for plain text code generation. No document formatting, colors, spacing, or page layout needed.
 
-- Integrate Steel Scheme interpreter, 
-- expose basic file I/O functions to Scheme
+### Phase 1: Foundation (2-3 weeks)
 
-# Add XML support
-- Add libxml2 integration with DTD validation,
-- expose XML DOM to Scheme for navigation
+**Goal**: Basic project structure + minimal viable product
 
-# Build CLI
-- Create CLI matching OpenJade interface:
--d template, -V variables, -D search paths"
+**Tasks:**
+1. Set up Cargo workspace with three crates:
+   - `skeme-core`: libxml2 + Steel integration
+   - `skeme-template`: Template engine, file I/O
+   - `skeme-cli`: Command-line interface
+
+2. Dependencies:
+   ```toml
+   libxml = "0.3"                 # libxml2 bindings
+   steel-core = "0.5"             # Steel Scheme interpreter
+   clap = { version = "4", features = ["derive"] }
+   ```
+
+3. Implement **~30 critical primitives**:
+   - Grove basics: `current-node`, `gi`, `id`, `children`, `parent`, `attribute-string`, `data`
+   - Node lists: `node-list`, `node-list-empty?`, `node-list-first`, `node-list-rest`
+   - Processing: `process-children`, `literal`, `sosofo-append`, `empty-sosofo`
+   - Selection: `select-elements`, `element-with-id`
+
+4. Basic file I/O:
+   - `write-file`, `ensure-dir`
+   - `get-variable` (CLI variables)
+   - `load` (load .scm files)
+
+**Deliverable**: Can run simple templates that traverse XML and output text.
+
+### Phase 2: Complete Grove Support (3-4 weeks)
+
+**Goal**: Full XML navigation and querying
+
+**Tasks:**
+1. Implement **~50 grove primitives**:
+   - Tree navigation: `ancestor`, `descendants`, `follow`, `preced`, `attributes`
+   - Position predicates: `first-sibling?`, `last-sibling?`, `have-ancestor?`
+   - Numbering: `child-number`, `element-number`, `hierarchical-number`
+   - Entities: `entity-system-id`, `entity-public-id`, etc.
+   - Notations: `notation-system-id`, `notation-public-id`, etc.
+
+2. Pattern matching:
+   - `select-elements` with pattern support
+   - `match-element?` predicate
+   - Pattern parser
+
+3. Node list operations:
+   - `node-list-map`, `node-list-ref`, `node-list-reverse`, `node-list-length`
+   - Lazy evaluation where possible
+
+**Deliverable**: Full OpenJade grove query compatibility.
+
+### Phase 3: Processing & Sosofo (2-3 weeks)
+
+**Goal**: Template processing control and output generation
+
+**Tasks:**
+1. Implement **~20 processing primitives**:
+   - `process-node-list`, `process-element-with-id`
+   - `process-matching-children`, `process-first-descendant`
+   - `next-match` (template rule chaining)
+   - `process-children-trim` (whitespace handling)
+
+2. Sosofo system:
+   - Sosofo data structure (concatenation of output fragments)
+   - `sosofo-append`, `sosofo-label`, `sosofo-discard-labeled`
+   - `literal` (text output)
+
+3. Formatting helpers:
+   - `format-number` (I, II, III, 1, 2, 3, a, b, c, etc.)
+   - `format-number-list` (1.2.3 hierarchical numbering)
+
+**Deliverable**: Complete code generation workflow working.
+
+### Phase 4: DSSSL Types (1-2 days) - **SIMPLIFIED**
+
+**Goal**: Stub implementations for DSSSL types (not needed for code generation)
+
+**User's use case**: Only `entity` + `formatting-instruction` flow objects → plain text output
+
+**Tasks:**
+1. Implement **~30 type primitives as STUBS**:
+   - Quantities: Return dummy values (not used for code generation)
+   - Colors: Return dummy values (not used for code generation)
+   - Addresses: Return dummy values (rarely used)
+   - Glyphs: Return dummy values (rarely used)
+   - Spacing: Return dummy values (not used for code generation)
+   - Character properties: Stub `char-script-case`, maybe implement `char-property`
+
+2. Stub implementation pattern:
+   ```rust
+   vm.register_fn("quantity?", |_obj| false);
+   vm.register_fn("color?", |_obj| false);
+   vm.register_fn("display-size", || vec![0, 0]);
+   // etc.
+   ```
+
+3. **Only implement properly if templates actually use them** (unlikely)
+
+**Deliverable**: All type primitives callable (return sensible defaults), templates don't error.
+
+### Phase 5: Extensions & Utilities (1-2 weeks)
+
+**Goal**: Remaining OpenJade primitives
+
+**Tasks:**
+1. Implement **~20 utility primitives**:
+   - Keywords: `keyword?`, `keyword->string`, `string->keyword`
+   - Time: `time`, `time->string`, `time<?`, etc.
+   - Language: `language?`, `current-language`, `with-language`
+   - Style: `style?`, `merge-style`
+   - Debug: `error`, `debug`
+   - Named node lists (if needed)
+
+2. Optional features:
+   - `sgml-parse` (parse nested documents)
+   - `read-entity` (read entity content)
+   - Page conditionals (if needed: `if-first-page`, `if-front-page`)
+
+**Deliverable**: 100% OpenJade primitive compatibility.
+
+### Phase 6: CLI & Integration (1-2 weeks)
+
+**Goal**: Complete CLI tool
+
+**Tasks:**
+1. Command-line interface:
+   - `-d template.scm` - Template file
+   - `-V key=value` - Variables (repeatable)
+   - `-D directory` - Search paths (repeatable)
+   - `-t xml` - Backend selection
+   - Input XML file(s)
+
+2. Template loading:
+   - Search path resolution
+   - `load` procedure integration
+   - Error reporting
+
+3. XML parsing:
+   - libxml2 integration
+   - DTD validation (automatic if `<!DOCTYPE>` present)
+   - Error reporting
+
+**Deliverable**: Complete CLI tool, OpenJade-compatible interface.
+
+### Phase 7: Testing & Documentation (2-4 weeks)
+
+**Goal**: Production-ready release
+
+**Tasks:**
+1. Testing:
+   - Unit tests for each primitive
+   - Integration tests with real templates
+   - Compare output with OpenJade
+   - Test with user's actual templates
+
+2. Documentation:
+   - README with quick start
+   - Primitive reference
+   - Migration guide (OpenJade → Skeme)
+   - Template examples
+
+3. Packaging:
+   - Publish to crates.io
+   - GitHub releases with binaries
+   - Static musl builds for Linux
+   - macOS universal binaries
+
+**Deliverable**: v1.0 release.
+
+### Phase 8: Distribution (Ongoing, 1-6 months)
+
+**Goal**: Available in package managers
+
+**Tasks:**
+1. **Immediate** (Week 1-2):
+   - Publish to crates.io
+   - GitHub releases
+   - Documentation site
+
+2. **Short-term** (Month 1-2):
+   - Arch AUR package
+   - Homebrew tap (personal)
+   - MacPorts submission
+
+3. **Medium-term** (Month 3-6):
+   - Homebrew core
+   - MacPorts official
+   - Fedora package
+   - openSUSE package
+
+4. **Long-term** (6+ months):
+   - Debian package (slow process)
+   - Ubuntu PPA
 
 ### Testing Strategy
 
-**Use existing templates as test cases:**
-- Convert SGML → XML (one-time with `opensp -x`)
-- Run both OpenJade and Skeme
-- Compare outputs
-- Fix discrepancies
-
 **Test pyramid:**
 ```
-Integration Tests (existing templates)
+Production Tests (user's actual templates)
         ↑
-    Feature Tests (new functionality)
+Integration Tests (synthetic templates)
         ↑
-    Unit Tests (Rust functions)
+    Primitive Tests (unit tests)
+        ↑
+    Type Tests (Rust ↔ Steel conversions)
 ```
+
+**Compatibility testing:**
+1. Convert user's SGML → XML (one-time: `opensp -x`)
+2. Run both OpenJade and Skeme on same XML
+3. Compare outputs
+4. Fix discrepancies
+5. Add regression test
+
+### Success Criteria
+
+**Phase completion checklist:**
+
+- [ ] Phase 1: Can generate simple code from XML
+- [ ] Phase 2: Full XML navigation works
+- [ ] Phase 3: Complex templates with processing control work
+- [ ] Phase 4: DSSSL types all functional
+- [ ] Phase 5: All 224 primitives implemented
+- [ ] Phase 6: CLI matches OpenJade interface
+- [ ] Phase 7: User's templates work identically to OpenJade
+- [ ] Phase 8: Available in at least 2 package managers
+
+**v1.0 Release criteria:**
+1. ✅ All 224 primitives working
+2. ✅ User's actual templates generate identical output to OpenJade
+3. ✅ DTD validation working
+4. ✅ CLI compatible with OpenJade
+5. ✅ Documentation complete
+6. ✅ Published to crates.io
+7. ✅ Binaries for macOS, Linux, Windows
 
 ---
 
@@ -600,7 +1144,14 @@ Integration Tests (existing templates)
 
 ### Standards & Specs
 
-- **DSSSL**: ISO/IEC 10179:1996 - ftp://ftp.jclark.com/pub/dsssl/dsssl96b.pdf
+- **DSSSL**: ISO/IEC 10179:1996
+  - Online: ftp://ftp.jclark.com/pub/dsssl/dsssl96b.pdf
+  - Local copy: `/Users/r.schleitzer/Documents/dsssl96b.pdf`
+  - **Key sections for Skeme implementation**:
+    - Section 8: Grove architecture and node properties
+    - Section 9: SDQL (Standard Document Query Language) - grove queries
+    - Section 10: Processing model - rules, modes, `next-match`
+    - Section 6: Data types - quantities, colors, addresses
 - **R4RS Scheme**: IEEE Std 1178-1990 (DSSSL base)
 - **R5RS Scheme**: http://www.schemers.org/Documents/Standards/R5RS/
 - **XML**: W3C XML 1.0 Specification
@@ -624,27 +1175,48 @@ Integration Tests (existing templates)
 ## Design Decisions Summary
 
 **Language Decisions:**
-- Rust (not C++) - Maintainability, safety, modern tooling
-- Steel (not scheme-rs) - Proven, R5RS, designed for embedding
-- libxml2 (not pure Rust) - Only mature DTD validation option
+- **Rust** (not C++) - Maintainability, safety, modern tooling, active ecosystem
+- **Steel Scheme** (not scheme-rs, not port OpenJade interpreter) - Proven, R5RS-compliant, designed for embedding, actively maintained
+- **libxml2** (not pure Rust, not OpenSP) - Only mature option for DTD validation, industry standard
 
-**Feature Decisions:**
-- Code generation only (not document formatting)
-- XML only (not SGML)
-- Pure .scm templates (not SGML specs)
-- `load` over SGML entities
-- Template-controlled output (no stdout redirection)
+**Scope Decisions:**
+- **Code generation only** (not document formatting)
+  - Implement SGML backend concept (text output)
+  - No RTF, TeX, MIF, HTML backends
+  - No flow objects for pagination
+- **XML only** (not SGML input)
+  - Use libxml2 for parsing
+  - Keep DTD validation
+  - One-time SGML → XML conversion acceptable
+- **Pure .scm templates** (not SGML-wrapped `<style-specification>`)
+  - R5RS Scheme files with block comments
+  - No CDATA sections needed
+  - Better editor support
+
+**Primitive Decisions:**
+- **All 224 OpenJade primitives** for full compatibility
+- **~90 from R5RS** via Steel (lists, strings, math, etc.)
+- **~134 custom implementations** (grove queries, processing, DSSSL types)
+- **Priority**: Grove navigation > Processing > Types > Utilities
 
 **CLI Decisions:**
-- Drop `-o` (template controls output)
-- Keep `-d`, `-V`, `-D` (OpenJade compatible)
-- Automatic DTD validation (no flag needed)
+- **Drop `-o` flag** - Template controls output via `write-file`
+- **Keep `-d`, `-V`, `-D`** - OpenJade compatible interface
+- **Automatic DTD validation** - No flag needed, triggered by `<!DOCTYPE>`
+- **Search paths** - Current dir, `-D` dirs, system dirs
 
 **Distribution Decisions:**
-- crates.io first (fast, foundational)
-- AUR + Homebrew tap (quick adoption)
-- MacPorts priority (stability, won't drop it)
-- Official repos later (once proven)
+- **crates.io first** - Fast, foundational, developer audience
+- **AUR + Homebrew tap** - Quick adoption, early feedback
+- **MacPorts priority** - Stability, won't drop packages easily
+- **Official repos later** - Once proven (Homebrew core, Fedora, Debian)
+
+**Implementation Decisions:**
+- **Use Steel, not port interpreter** - 3-4 months saved, R5RS compliance
+- **Implement primitives as Rust functions** - Type safety, performance
+- **libxml2 FFI** - Battle-tested, not reinvent parser
+- **Phased development** - MVP first, then expand
+- **Test against user's templates** - Real-world validation
 
 ---
 
@@ -652,16 +1224,19 @@ Integration Tests (existing templates)
 
 **Project succeeds if:**
 
-1. ✅ User can replace OpenJade with Skeme
-3. ✅ Available in MacPorts + Homebrew (won't disappear)
-4. ✅ Can build from source anywhere
-5. ✅ Easier to maintain than OpenJade
-6. ✅ Community can contribute (Rust vs C++)
+1. ✅ **Drop-in replacement** - User can replace OpenJade with Skeme for their existing templates
+2. ✅ **Full compatibility** - All 224 OpenJade primitives work identically
+3. ✅ **Output identical** - Templates generate same code as OpenJade
+4. ✅ **Available in package managers** - MacPorts + Homebrew minimum (won't disappear)
+5. ✅ **Build from source anywhere** - Pure Rust + libxml2 (standard dependency)
+6. ✅ **Easier to maintain** - Modern codebase, good documentation
+7. ✅ **Community can contribute** - Rust vs C++, clear architecture
 
 **Bonus success:**
-- Others adopt Skeme for code generation
-- Templates shared as libraries
-- Used beyond original use case
+- **Others adopt Skeme** - Beyond original use case
+- **Template libraries** - Shared, reusable code generators
+- **Extended features** - REPL mode, watch mode, template debugger
+- **Multiple backends** - S-expression input, JSON output, etc.
 
 ---
 
@@ -681,6 +1256,88 @@ Integration Tests (existing templates)
 
 ## Contact & Contributing
 
-**Project Status**: In development  
-**Target**: v1.0 release when feature-complete  
+**Project Status**: In development
+**Target**: v1.0 release when feature-complete
 **License**: MIT
+
+---
+
+## Analysis Summary (Updated 2025-01-16)
+
+### Key Findings from OpenJade Analysis
+
+1. **OpenJade codebase**: ~72,000 lines C++ (not including OpenSP)
+2. **OpenSP dependency**: Separate project, ~100-150K lines (not needed - use libxml2)
+3. **Total primitives**: 224 Scheme functions
+   - 90 from R5RS (Steel provides)
+   - 134 DSSSL-specific (Skeme must implement)
+4. **SGML backend**: 2,824 lines (core feature to preserve)
+5. **Critical files**:
+   - `style/primitive.h` - All 224 primitives defined
+   - `style/primitive.cxx` - 5,704 lines of implementations
+   - `jade/SgmlFOTBuilder.cxx` - 2,824 lines backend logic
+
+### Implementation Strategy
+
+**Chosen approach**: Hybrid (reimplementation with Steel)
+
+**What we use:**
+- ✅ Steel Scheme (R5RS interpreter) - ~90 primitives free
+- ✅ libxml2 (XML + DTD validation) - battle-tested
+- ✅ Pure Rust (modern, safe, maintainable)
+
+**What we implement:**
+- ✅ ~134 DSSSL primitives as Rust functions
+- ✅ Grove query engine (XML navigation)
+- ✅ Processing control (sosofo, template rules)
+- ✅ DSSSL types (quantities, colors, addresses, glyphs)
+- ✅ File I/O and CLI integration
+
+**What we drop:**
+- ❌ OpenSP parser (use libxml2 instead)
+- ❌ OpenJade interpreter (use Steel instead)
+- ❌ Other backends (RTF, TeX, MIF, HTML)
+- ❌ SGML-wrapped templates (pure .scm files)
+- ❌ Document formatting features
+
+### Effort Estimate
+
+**Timeline**: 3-6 months (solo, experienced Rust developer)
+
+**Breakdown**:
+- Foundation: 2-3 weeks
+- Grove support: 3-4 weeks
+- Processing & Sosofo: 2-3 weeks
+- DSSSL types: **1-2 days** (stubs only - major time saver!)
+- Extensions: 1-2 weeks
+- CLI integration: 1-2 weeks
+- Testing & docs: 2-4 weeks
+- Distribution: Ongoing (1-6 months)
+
+**Key milestone**: MVP in ~6-8 weeks (Phases 1-3)
+**Near-complete**: ~10-12 weeks (Phases 1-6)
+
+### Risk Mitigation
+
+**Low risks**:
+- Steel Scheme integration - well-documented, designed for embedding
+- libxml2 FFI - stable, widely used
+- Primitive implementation - straightforward Rust functions
+
+**Medium risks**:
+- Pattern matching complexity - requires parser
+- Node list lazy evaluation - performance critical
+- Template rule chaining (`next-match`) - requires careful design
+
+**Mitigation**:
+- Start with user's actual templates (real-world validation)
+- Compare output with OpenJade at each phase
+- Build test suite from day one
+
+### Next Steps
+
+1. **Phase 1 start**: Set up Cargo workspace
+2. **Implement MVP**: ~30 critical primitives
+3. **Test with simple template**: Validate approach
+4. **Iterate**: Add primitives based on user needs
+5. **Full compatibility**: All 224 primitives working

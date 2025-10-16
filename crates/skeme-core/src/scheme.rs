@@ -70,6 +70,11 @@ impl SchemeEngine {
         }
     }
 
+    /// Get search paths (for debugging)
+    pub fn search_paths(&self) -> &[std::path::PathBuf] {
+        &self.search_paths
+    }
+
     /// Find a file in the search paths
     fn find_in_search_paths(&self, filename: &str) -> Option<std::path::PathBuf> {
         use std::path::Path;

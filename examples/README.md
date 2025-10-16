@@ -434,19 +434,85 @@ Entities are expanded automatically by libxml2. See `XML_DSSSL_GUIDE.md` for com
 
 ## Known Limitations
 
-1. **Pattern matching** - Advanced pattern matching in element rules
-   - DSSSL supports complex patterns: `(element (or field method) ...)`
-   - Skeme currently uses simple GI symbol matching
-   - Can be added if needed for specific use cases
+Skeme implements the **code generation subset** of DSSSL. The following DSSSL features are not yet implemented:
 
-2. **Advanced grove primitives** - Some DSSSL primitives not yet implemented:
-   - `ancestor`, `preced`, `follow`, `follow-sibling`, `preceding-sibling`
-   - Can be added if needed for specific use cases
+### 1. **Pattern matching in element rules**
+   - DSSSL: `(element (or field method) ...)`, `(element (field attribute: "required") ...)`
+   - Skeme: Simple GI symbol matching only
+   - **Workaround**: Use predicates in imperative style
+   - Can be added if needed
 
-3. **Flow object characteristics** - Limited flow object support
-   - DSSSL has rich characteristics: `font-size:`, `font-weight:`, etc.
-   - Skeme focuses on code generation (sequence, entity)
-   - Document formatting flow objects can be added if needed
+### 2. **Advanced grove navigation primitives**
+   **Missing:**
+   - `ancestor` - Get ancestor by type
+   - `preceding-sibling`, `following-sibling` - Sibling navigation
+   - `preced`, `follow` - Document order navigation
+   - `node-property` - Generic property accessor
+   - `attribute-ref` - Attribute reference nodes
+   - **Workaround**: Use `parent` + recursion, or `children` + filtering
+   - Can be added on demand
+
+### 3. **Document formatting flow objects**
+   **Missing:**
+   - `paragraph`, `display-group`, `score`, `box`
+   - `simple-page-sequence`, `scroll`, `link`
+   - Flow object characteristics: `font-size:`, `font-weight:`, `space-before:`
+   - **Rationale**: Skeme focuses on code generation, not document formatting
+   - **Available**: `sequence`, `entity` (sufficient for code generation)
+   - Can add if document formatting needed
+
+### 4. **Query language features**
+   **Missing:**
+   - `node-list-filter-out`, `node-list-union-map`
+   - `ancestor-member` - Check if node is ancestor
+   - `node-list-property` - Property queries
+   - `hierarchical-number-recursive`
+   - **Workaround**: Use `node-list-filter`, `node-list-map`, `node-list-some`
+   - Most use cases covered by existing primitives
+
+### 5. **Mode inheritance and named modes**
+   **Missing:**
+   - Mode inheritance: `(mode derived base-mode ...)`
+   - **Available**: Modes work, just without inheritance
+   - Can be added if needed
+
+### 6. **Character and language features**
+   **Missing:**
+   - `char-property`, `glyph-id`, `language`
+   - Character map specifications
+   - **Rationale**: Code generation doesn't need character/glyph properties
+
+### 7. **External procedures and quantities**
+   **Missing:**
+   - `external-procedure` declarations
+   - Quantity types: `length`, `quantity`, `display-space`
+   - **Rationale**: Skeme uses R5RS Scheme directly
+   - Rust functions can be registered instead
+
+### 8. **SOSOFO introspection**
+   **Missing:**
+   - `sosofo->string` - Convert SOSOFO to string
+   - **Available**: SOSFOs are opaque (correct DSSSL behavior for file output)
+
+### 9. **SGML-specific features**
+   **Missing:**
+   - SGML entity handling
+   - SDATA entities
+   - SUBDOC support
+   - **Rationale**: Skeme uses XML + libxml2 (cleaner, more maintainable)
+   - XML entities work via `<!ENTITY>` declarations
+
+### 10. **What IS Implemented** ✓
+   - ✅ Construction rules with `element`, `make`, `default`
+   - ✅ Modes with `mode`, `with-mode`
+   - ✅ 27 grove navigation primitives
+   - ✅ Node-list operations (filter, map, some, etc.)
+   - ✅ File output via `make entity`
+   - ✅ R5RS Scheme (full language)
+   - ✅ XML + DTD validation
+   - ✅ Entity expansion
+
+**Bottom line**: Skeme implements everything needed for **code generation** from XML. Document formatting (PDF, HTML with styling) is out of scope.
 
 ## Next Steps
 

@@ -86,22 +86,24 @@ All R5RS primitives are available:
 
 ## Known Limitations
 
-1. **Load primitive** - `load` for loading helper libraries not yet implemented
-   - Workaround: Use Steel's module system or inline helpers
+1. **Load primitive** - Runtime `(load "file.scm")` is not feasible with Steel's evaluation model
+   - Steel's `eval-string` uses isolated environments, so definitions don't propagate
+   - **Recommended approach**: Inline helper functions directly in templates
+   - Templates remain self-contained and easier to understand
 
 2. **Process-children** - Context-dependent processing not yet implemented
    - Workaround: Use `children` + `select-elements` + `map`
 
 3. **Advanced grove primitives** - Some DSSSL primitives not yet implemented:
    - `element-with-id`, `ancestor`, `preced`, `follow`, etc.
-   - XPath support would be nice but not in DSSSL spec
+   - Can be added if needed for specific use cases
 
 ## Next Steps
 
-- Implement `load` primitive for modular templates
-- Add `process-children` for context-dependent processing
-- More grove primitives as needed
+- Add `process-children` for context-dependent processing (if needed)
+- More grove primitives as specific use cases require them
 - Performance optimization for large documents
+- Standard library of common patterns (as inline examples)
 
 ## Template Structure
 

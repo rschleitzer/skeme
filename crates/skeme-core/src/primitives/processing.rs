@@ -73,6 +73,9 @@ impl Sosofo {
             use std::fs;
             use std::path::Path;
 
+            eprintln!("[DEBUG] Writing to file: {}", filename);
+            eprintln!("[DEBUG] Content length: {} bytes", self.text.len());
+
             // Create parent directories if needed
             if let Some(parent) = Path::new(filename).parent() {
                 fs::create_dir_all(parent)
@@ -83,8 +86,10 @@ impl Sosofo {
             fs::write(filename, &self.text)
                 .with_context(|| format!("Failed to write file: {}", filename))?;
 
+            eprintln!("[DEBUG] File written successfully");
             Ok(())
         } else {
+            eprintln!("[DEBUG] SOSOFO has no output file - skipping write");
             Ok(()) // No file to write
         }
     }
@@ -98,7 +103,7 @@ pub fn register_processing_primitives(engine: &mut SchemeEngine) -> Result<()> {
     // SOSOFO constructors
     engine.register_fn("literal", processing_literal);
     engine.register_fn("empty-sosofo", processing_empty_sosofo);
-    engine.register_fn("sosofo-append", processing_sosofo_append);
+    engine.register_fn("sosofo-append-two", processing_sosofo_append_two);
 
     // Flow object creation
     // Note: make is a keyword in DSSSL, but we'll handle it as a function
@@ -131,9 +136,9 @@ fn processing_empty_sosofo() -> Sosofo {
     Sosofo::empty()
 }
 
-/// Append two sosofos
-fn processing_sosofo_append(a: &Sosofo, b: &Sosofo) -> Sosofo {
-    a.append(b)
+/// Append two sosofos (will be wrapped in Scheme for variadic support)
+fn processing_sosofo_append_two(s1: &Sosofo, s2: &Sosofo) -> Sosofo {
+    s1.append(s2)
 }
 
 // ============================================================================
@@ -144,8 +149,11 @@ fn processing_sosofo_append(a: &Sosofo, b: &Sosofo) -> Sosofo {
 /// In OpenJade: (make entity system-id: "filename" (literal "content"))
 /// For us: (make-entity "filename" sosofo)
 fn processing_make_entity(system_id: String, content: &Sosofo) -> Sosofo {
+    eprintln!("[DEBUG] make-entity called: filename='{}', content_len={}", system_id, content.text().len());
     // Create a sosofo with the filename attached
-    Sosofo::with_file(content.text().to_string(), system_id)
+    let result = Sosofo::with_file(content.text().to_string(), system_id.clone());
+    eprintln!("[DEBUG] make-entity result: has_file={}", result.output_file().is_some());
+    result
 }
 
 /// Create a formatting-instruction flow object (plain text output)

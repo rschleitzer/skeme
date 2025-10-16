@@ -19,12 +19,113 @@ pub struct SchemeEngine {
 /// Prelude code that defines helper functions
 const PRELUDE: &str = r#"
 ;; ============================================================================
+;; DSSSL Compatibility Stubs
+;; ============================================================================
+
+;; define-language: DSSSL feature for character case mappings
+;; Steel Scheme has built-in char-upcase and char-downcase
+(define-syntax define-language
+  (syntax-rules ()
+    ((define-language name . rest) #f)))
+
+;; declare-default-language: DSSSL feature
+(define-syntax declare-default-language
+  (syntax-rules ()
+    ((declare-default-language name) #f)))
+
+;; declare-flow-object-class: DSSSL metadata
+(define-syntax declare-flow-object-class
+  (syntax-rules ()
+    ((declare-flow-object-class name public-id) #f)))
+
+;; declare-characteristic: DSSSL metadata
+(define-syntax declare-characteristic
+  (syntax-rules ()
+    ((declare-characteristic name public-id default-value) #f)))
+
+;; external-procedure: DSSSL feature for calling external code
+(define-syntax external-procedure
+  (syntax-rules ()
+    ((external-procedure public-id)
+     (lambda args #f))))
+
+;; ============================================================================
 ;; Global Variables
 ;; ============================================================================
 
-;; current-root and current-node will be set when grove is loaded
-(define current-root #f)
-(define current-node #f)
+;; Internal storage for grove and nodes (with mutation)
+;; These are replaced when set_current_grove() is called from Rust
+(define *current-grove-internal* #f)
+(define *current-root-internal* #f)
+(define *current-node-internal* #f)
+
+;; DSSSL functions: current-node and current-root are FUNCTIONS, not variables!
+(define (current-grove)
+  *current-grove-internal*)
+
+(define (current-root)
+  *current-root-internal*)
+
+(define (current-node)
+  *current-node-internal*)
+
+;; ============================================================================
+;; DSSSL Compatibility Wrappers
+;; ============================================================================
+
+;; OpenJade-compatible element-with-id: takes just an ID, searches current grove
+;; The Rust function is grove-element-with-id(grove, id)
+(define (element-with-id id)
+  (let ((grove (current-grove)))
+    (if grove
+        (grove-element-with-id grove id)
+        #f)))
+
+;; Grove query functions with optional node parameter (defaults to current-node)
+
+(define gi
+  (case-lambda
+    (() (grove-gi-impl (current-node)))
+    ((node) (grove-gi-impl node))))
+
+(define id
+  (case-lambda
+    (()
+     (let ((val (grove-id-impl (current-node))))
+       (if val val "")))
+    ((node)
+     (let ((val (grove-id-impl node)))
+       (if val val "")))))
+
+(define data
+  (case-lambda
+    (() (grove-data-impl (current-node)))
+    ((node) (grove-data-impl node))))
+
+;; attribute-string with optional node and default parameters
+;; DSSSL: (attribute-string "name") uses current-node
+;; DSSSL: (attribute-string "name" node) uses given node
+;; DSSSL: (attribute-string "name" node "default") returns default if not found
+;; Returns "" (empty string) by default if attribute doesn't exist
+(define attribute-string
+  (case-lambda
+    ((name)
+     (let ((val (grove-attribute-string-impl name (current-node))))
+       (if val val "")))
+    ((name node)
+     (let ((val (grove-attribute-string-impl name node)))
+       (if val val "")))
+    ((name node default)
+      (let ((val (grove-attribute-string-impl name node)))
+        (if val val default)))))
+
+;; Variadic sosofo-append (wrapper around binary sosofo-append-two)
+(define (sosofo-append . sosofos)
+  (cond
+    ((null? sosofos) (empty-sosofo))
+    ((null? (cdr sosofos)) (car sosofos))
+    (else (sosofo-append-two (car sosofos) (apply sosofo-append (cdr sosofos))))))
+
 
 ;; ============================================================================
 ;; Node-list operations with predicates
@@ -43,7 +144,7 @@ const PRELUDE: &str = r#"
   (let ((result (filter-helper nl '())))
     (if (null? result)
         (empty-node-list)
-        (apply node-list result))))
+        (apply node-list (reverse result)))))
 
 (define (node-list-some pred nl)
   "Test if any node in node-list matches predicate"
@@ -213,7 +314,8 @@ const PRELUDE: &str = r#"
 (define (find-rule gi-symbol)
   "Look up construction rule by GI symbol in current processing mode"
   (let ((rules (get-mode-rules *processing-mode*)))
-    (let ((entry (assq gi-symbol rules)))
+    ;; Use assoc instead of assq - Steel doesn't intern symbols from string->symbol
+    (let ((entry (assoc gi-symbol rules)))
       (if entry
           (cdr entry)
           #f))))
@@ -229,11 +331,11 @@ const PRELUDE: &str = r#"
 ;; Process a single node by applying its construction rule
 (define (process-node node)
   "Apply construction rule to a node (mode-aware)"
-  (if (element? node)
+  (if (and node (element? node))
       (let ((gi-symbol (string->symbol (gi node)))
-            (saved-node current-node))
+            (saved-node (current-node)))
         ;; Rebind current-node for this rule's execution
-        (set! current-node node)
+        (set! *current-node-internal* node)
         (let ((rule (find-rule gi-symbol)))
           (let ((result (cond
                           ;; Element has specific rule in current mode
@@ -243,7 +345,7 @@ const PRELUDE: &str = r#"
                           ;; No rule: return empty
                           (else (empty-sosofo)))))
             ;; Restore previous current-node
-            (set! current-node saved-node)
+            (set! *current-node-internal* saved-node)
             result)))
       ;; Text nodes: return empty (or could return their content)
       (empty-sosofo)))
@@ -251,7 +353,7 @@ const PRELUDE: &str = r#"
 ;; Process all children of current-node
 (define (process-children)
   "Process children of current-node using construction rules"
-  (let ((child-nodes (children current-node)))
+  (let ((child-nodes (children (current-node))))
     (process-node-list child-nodes)))
 
 ;; Process a node-list (optimized for performance)
@@ -266,7 +368,48 @@ const PRELUDE: &str = r#"
 ;; Process starting from root
 (define (process-root)
   "Start processing from current-root"
-  (process-node current-root))
+  (let ((result (process-node (current-root))))
+    ;; Auto-write entity flow objects
+    (write-sosofo result)
+    result))
+
+;; ============================================================================
+;; R5RS multi-list map (Steel's map only supports single lists)
+;; This MUST be at the end, after all uses of map in the prelude
+;; ============================================================================
+
+;; Save Steel's built-in single-list map before redefining
+(define steel-builtin-map map)
+
+;; Helper: check if any list in a list-of-lists is empty
+(define (any-null? lists)
+  (if (null? lists)
+      #f
+      (if (null? (car lists))
+          #t
+          (any-null? (cdr lists)))))
+
+;; R5RS-compliant map that supports multiple lists
+(set! map
+  (lambda (proc . lists)
+    "R5RS map supporting multiple lists"
+    (cond
+      ;; Single list: use Steel's built-in map
+      ((= (length lists) 1)
+       (steel-builtin-map proc (car lists)))
+
+      ;; Multiple lists: implement multi-list mapping
+      ((> (length lists) 1)
+       (let loop ((lsts lists))
+         ;; Check if any list is empty
+         (if (any-null? lsts)
+             '()
+             ;; Apply proc to first element of each list, then recurse on rest
+             (cons (apply proc (steel-builtin-map car lsts))
+                   (loop (steel-builtin-map cdr lsts))))))
+
+      ;; Edge case: no lists
+      (else '()))))
 "#;
 
 impl SchemeEngine {
@@ -285,7 +428,7 @@ impl SchemeEngine {
         primitives::processing::register_processing_primitives(&mut scheme_engine)?;
         primitives::util::register_util_primitives(&mut scheme_engine)?;
 
-        // Load prelude (defines load and other helpers)
+        // Load prelude (defines *current-grove-internal*, etc. and helper functions)
         scheme_engine.engine
             .compile_and_run_raw_program(PRELUDE.to_string())
             .map_err(|e| anyhow::anyhow!("Failed to load prelude: {:?}", e))?;
@@ -409,23 +552,39 @@ impl SchemeEngine {
         // Wrap in Document for safe handling (Document's Drop will free the doc)
         let doc = Document::new_ptr(doc_ptr);
 
-        // Use XPath to find <style-specification> element
+        // Use XPath to find <style-specification> or <STYLE-SPECIFICATION> element (case-insensitive)
         let context = Context::new(&doc)
             .map_err(|_| anyhow::anyhow!("Failed to create XPath context"))?;
 
-        let result = context
+        // Try lowercase first
+        let mut result = context
             .evaluate("//style-specification")
             .map_err(|_| anyhow::anyhow!("XPath evaluation failed"))?;
 
-        let nodes = result.get_nodes_as_vec();
+        let mut nodes = result.get_nodes_as_vec();
+
+        // If not found, try uppercase (OpenJade style)
+        if nodes.is_empty() {
+            result = context
+                .evaluate("//STYLE-SPECIFICATION")
+                .map_err(|_| anyhow::anyhow!("XPath evaluation failed"))?;
+            nodes = result.get_nodes_as_vec();
+        }
 
         if nodes.is_empty() {
-            anyhow::bail!("No <style-specification> element found in XML template");
+            anyhow::bail!("No <style-specification> or <STYLE-SPECIFICATION> element found in XML template");
         }
 
         // Extract text content (entities now expanded by libxml2)
         let node = &nodes[0];
         let text = node.get_content();
+
+        // DEBUG: Write expanded template to file for debugging
+        if let Err(e) = std::fs::write("/tmp/expanded-template.scm", &text) {
+            eprintln!("Warning: Could not write expanded template: {}", e);
+        } else {
+            eprintln!("[DEBUG] Wrote expanded template to /tmp/expanded-template.scm ({} bytes)", text.len());
+        }
 
         // Document's Drop will clean up automatically
 
@@ -462,17 +621,31 @@ impl SchemeEngine {
         // We need to keep the Grove (which owns the Document) alive
         // So we'll register both the grove and provide a function to get the root
 
-        // Wrap the entire grove in a SteelVal
-        let grove_val = SteelVal::Custom(Gc::new_mut(Box::new(grove)));
-        self.engine.register_value("current-grove", grove_val);
+        // Get the root node
+        let root = grove.root().clone();
 
-        // Now evaluate Scheme code to extract the root and make it available
-        // We'll do this by calling our grove-root primitive
+        // Wrap values in SteelVal and register them with unique names
+        let grove_val = SteelVal::Custom(Gc::new_mut(Box::new(grove)));
+        let root_val = SteelVal::Custom(Gc::new_mut(Box::new(root.clone())));
+        let node_val = SteelVal::Custom(Gc::new_mut(Box::new(root)));
+
+        // Register with temporary names (register_value creates NEW bindings)
+        self.engine.register_value("***grove-tmp***", grove_val);
+        self.engine.register_value("***root-tmp***", root_val);
+        self.engine.register_value("***node-tmp***", node_val);
+
+        // Now use set! to update the internal variables defined in the prelude
+        // Also redefine the accessor functions to ensure they capture the current scope
         let code = r#"
-(define current-root (grove-root current-grove))
-(define current-node current-root)
+(set! *current-grove-internal* ***grove-tmp***)
+(set! *current-root-internal* ***root-tmp***)
+(set! *current-node-internal* ***node-tmp***)
+
+(set! current-grove (lambda () *current-grove-internal*))
+(set! current-root (lambda () *current-root-internal*))
+(set! current-node (lambda () *current-node-internal*))
 "#;
-        let _ = self.eval(code);
+        self.eval(code)?;
 
         Ok(())
     }

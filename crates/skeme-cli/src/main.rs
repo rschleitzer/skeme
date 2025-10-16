@@ -53,23 +53,26 @@ fn main() -> Result<()> {
         engine.set_variable(name.clone(), value.clone());
     }
 
-    // Step 4: Make the grove root available to Scheme
+    // Step 4: Load template FIRST (registers construction rules)
+    info!("Loading template: {}", args.template.display());
+    engine
+        .load_file(args.template.to_str().unwrap())
+        .context("Failed to load template")?;
+    info!("Template loaded successfully");
+
+    // Step 5: Set grove AFTER loading template (so it doesn't get reset)
     info!("Grove root element: {}", grove.root().gi());
     engine
         .set_current_grove(grove)
         .context("Failed to set current grove")?;
     info!("Grove root registered as 'current-root' in Scheme");
 
-    // Step 5: Load and execute template
-    info!("Loading template: {}", args.template.display());
+    // Step 6: Start processing (call process-root)
+    info!("Starting template processing");
     engine
-        .load_file(args.template.to_str().unwrap())
-        .context("Failed to load template")?;
-    info!("Template executed successfully");
-
-    // Step 6: Output results
-    // For now, templates will handle their own output via make-entity
-    // In the future, we might capture the final sosofo and process it
+        .eval("(process-root)")
+        .context("Failed to process document")?;
+    info!("Processing complete");
 
     println!("\nSkeme processing complete!");
     println!("Template: {}", args.template.display());

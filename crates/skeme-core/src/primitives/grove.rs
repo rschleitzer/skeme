@@ -16,11 +16,11 @@ pub fn register_grove_primitives(engine: &mut SchemeEngine) -> Result<()> {
     // Grove accessors
     engine.register_fn("grove-root", grove_root);
 
-    // Node property accessors
-    engine.register_fn("gi", grove_gi);
-    engine.register_fn("id", grove_id);
-    engine.register_fn("data", grove_data);
-    engine.register_fn("attribute-string", grove_attribute_string);
+    // Node property accessors (register as -impl, wrapped in Scheme for optional params)
+    engine.register_fn("grove-gi-impl", grove_gi);
+    engine.register_fn("grove-id-impl", grove_id);
+    engine.register_fn("grove-data-impl", grove_data);
+    engine.register_fn("grove-attribute-string-impl", grove_attribute_string_impl);
 
     // Node navigation
     engine.register_fn("children", grove_children);
@@ -47,8 +47,8 @@ pub fn register_grove_primitives(engine: &mut SchemeEngine) -> Result<()> {
     engine.register_fn("empty-node-list", grove_empty_node_list);
     engine.register_fn("node-list-reverse", grove_node_list_reverse);
 
-    // Element lookup
-    engine.register_fn("element-with-id", grove_element_with_id);
+    // Element lookup (registered as grove-element-with-id, wrapped in Scheme as element-with-id)
+    engine.register_fn("grove-element-with-id", grove_element_with_id);
 
     // Child numbering
     engine.register_fn("child-number", grove_child_number);
@@ -84,8 +84,9 @@ fn grove_data(node: &Node) -> String {
     node.data()
 }
 
-/// Get an attribute value by name
-fn grove_attribute_string(node: &Node, name: String) -> Option<String> {
+/// Get an attribute value by name (Rust implementation - always 2 args)
+/// Wrapped in Scheme to support optional node parameter
+fn grove_attribute_string_impl(name: String, node: &Node) -> Option<String> {
     node.attribute(&name)
 }
 

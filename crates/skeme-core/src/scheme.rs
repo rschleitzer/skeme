@@ -16,10 +16,53 @@ pub struct SchemeEngine {
     search_paths: Vec<std::path::PathBuf>,
 }
 
-/// Prelude code that defines load and other helpers
-/// Currently empty - load primitive removed due to Steel limitations
+/// Prelude code that defines helper functions
 const PRELUDE: &str = r#"
-;; Prelude loaded successfully
+;; Node-list operations with predicates
+
+(define (node-list-filter pred nl)
+  "Filter node-list by predicate function"
+  (define (filter-helper nodes acc)
+    (if (node-list-empty? nodes)
+        acc
+        (let ((first (node-list-first nodes))
+              (rest (node-list-rest nodes)))
+          (if (pred first)
+              (filter-helper rest (cons first acc))
+              (filter-helper rest acc)))))
+  (let ((result (filter-helper nl '())))
+    (if (null? result)
+        (empty-node-list)
+        (apply node-list result))))
+
+(define (node-list-some pred nl)
+  "Test if any node in node-list matches predicate"
+  (define (some-helper nodes)
+    (if (node-list-empty? nodes)
+        #f
+        (let ((first (node-list-first nodes)))
+          (if (pred first)
+              #t
+              (some-helper (node-list-rest nodes))))))
+  (some-helper nl))
+
+(define (node-list-map proc nl)
+  "Map procedure over node-list"
+  (define (map-helper nodes acc)
+    (if (node-list-empty? nodes)
+        (reverse acc)
+        (let ((first (node-list-first nodes))
+              (rest (node-list-rest nodes)))
+          (map-helper rest (cons (proc first) acc)))))
+  (map-helper nl '()))
+
+(define (node-list-count nl)
+  "Count nodes in node-list"
+  (node-list-length nl))
+
+(define (node-list-contains? nl node)
+  "Check if node-list contains a specific node"
+  (node-list-some (lambda (n) (equal? n node)) nl))
 "#;
 
 impl SchemeEngine {
@@ -221,7 +264,10 @@ impl SchemeEngine {
 
         // Now evaluate Scheme code to extract the root and make it available
         // We'll do this by calling our grove-root primitive
-        let code = "(define current-root (grove-root current-grove))";
+        let code = r#"
+(define current-root (grove-root current-grove))
+(define current-node current-root)
+"#;
         let _ = self.eval(code);
 
         Ok(())

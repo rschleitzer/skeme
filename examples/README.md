@@ -43,22 +43,49 @@ More comprehensive demonstration:
 
 ## Available Primitives
 
-### Grove Primitives (17)
+### Grove Primitives (27)
+
+**Node Property Accessors:**
 - `grove-root` - Get root node from grove
 - `gi` - Get element name
 - `id` - Get ID attribute
 - `data` - Get text content
-- `attribute-string` - Get attribute value
-- `children` - Get child nodes
+- `attribute-string` - Get attribute value by name
+
+**Node Navigation:**
+- `children` - Get child nodes as node-list
 - `parent` - Get parent node
+- `descendants` - Get all descendant nodes (depth-first)
+
+**Node-list Operations:**
+- `node-list` - Create node-list from nodes (used with `apply`)
 - `node-list-empty?` - Check if node list is empty
 - `node-list-first` - Get first node
 - `node-list-rest` - Get rest of nodes
 - `node-list-length` - Get node list length
+- `node-list->list` - Convert node-list to Scheme list
+- `empty-node-list` - Create empty node-list
+- `node-list-reverse` - Reverse node-list order
+
+**Node-list Filtering and Searching:**
+- `select-elements` - Filter node-list by element name
+- `select-children` - Select immediate children by element name
+- `element-with-id` - Find element by ID attribute anywhere in tree
+
+**Node-list Higher-Order Functions:**
+- `node-list-filter` - Filter node-list with predicate function
+- `node-list-map` - Map procedure over node-list
+- `node-list-some` - Test if any node matches predicate
+- `node-list-contains?` - Check if node-list contains specific node
+- `node-list-count` - Count nodes in node-list (alias for node-list-length)
+
+**Type Predicates:**
 - `element?` - Check if element node
 - `text?` - Check if text node
-- `select-elements` - Filter node-list by element name
-- `descendants` - Get all descendant nodes (depth-first)
+
+**Context Variables:**
+- `current-root` - Root node of current grove (auto-set)
+- `current-node` - Current processing node (initially set to current-root)
 
 ### Processing Primitives (6)
 - `literal` - Create text sosofo
@@ -77,12 +104,120 @@ All R5RS primitives are available:
 
 ## Working Features ✓
 
-- **Grove navigation** - Full XML tree navigation with 17 primitives
+- **Grove navigation** - Full XML tree navigation with 27 primitives
+- **Node-list operations** - Filter, map, search with predicate functions
 - **File output** - `make-entity` + `write-sosofo` write generated code to files
 - **DTD validation** - libxml2 parses and validates against DTDs
 - **Template search paths** - `-D dir` flag to specify template directories
 - **Variables** - `-V key=value` flags injected as Scheme variables
 - **Auto directory creation** - Output directories created automatically
+
+## Practical Examples
+
+### Using select-children
+
+```scheme
+;; Get all <field> elements that are immediate children
+(define class-node current-root)
+(define fields (select-children class-node "field"))
+
+;; Process each field
+(define field-list (node-list->list fields))
+(map (lambda (field)
+       (let ((name (attribute-string field "name"))
+             (type (attribute-string field "type")))
+         (generate-field name type)))
+     field-list)
+```
+
+### Using node-list-filter
+
+```scheme
+;; Filter fields by predicate
+(define all-fields (select-children class-node "field"))
+
+;; Get only required fields
+(define required-fields
+  (node-list-filter
+    (lambda (field)
+      (equal? (attribute-string field "required") "true"))
+    all-fields))
+
+;; Get only string fields
+(define string-fields
+  (node-list-filter
+    (lambda (field)
+      (equal? (attribute-string field "type") "String"))
+    all-fields))
+```
+
+### Using node-list-map
+
+```scheme
+;; Extract all field names
+(define field-names
+  (node-list-map
+    (lambda (field) (attribute-string field "name"))
+    all-fields))
+
+;; field-names is now a regular Scheme list of strings
+```
+
+### Using element-with-id
+
+```scheme
+;; Find element anywhere in tree by ID
+(define employee-class (element-with-id current-grove "employee-class"))
+
+(if employee-class
+    (let ((name (attribute-string employee-class "name")))
+      (display (string-append "Found class: " name)))
+    (display "Class not found"))
+```
+
+### Using node-list-some
+
+```scheme
+;; Check if any field has specific property
+(define has-id-field?
+  (node-list-some
+    (lambda (field)
+      (equal? (attribute-string field "name") "id"))
+    all-fields))
+
+(if has-id-field?
+    (generate-with-id)
+    (generate-without-id))
+```
+
+### Using node-list-contains?
+
+```scheme
+;; Check if specific node is in a filtered list
+(define required-fields
+  (node-list-filter
+    (lambda (f) (equal? (attribute-string f "required") "true"))
+    all-fields))
+
+(define name-field (node-list-first (select-children class-node "name")))
+
+(if (node-list-contains? required-fields name-field)
+    (display "Name field is required")
+    (display "Name field is optional"))
+```
+
+### Using current-node
+
+```scheme
+;; current-node is automatically set to current-root at start
+(define root-name (gi current-node))  ; Get root element name
+
+;; You can rebind current-node for context-dependent processing
+(define (process-with-context node)
+  (let ((current-node node))  ; Locally rebind
+    ;; Now current-node refers to 'node' in this scope
+    (process-children current-node)))
+```
 
 ## Code Reuse with XML Entities
 
@@ -114,9 +249,13 @@ Entities are expanded automatically by libxml2. See `XML_DSSSL_GUIDE.md` for com
 
 ### Examples with Entities
 
-- `codegen-xml-v2.dsl` - XML template with entity includes
-- `codegen-xml-cdata.dsl` - Template using CDATA-protected helpers
-- `codegen-xml-mixed.dsl` - CDATA in main template and helpers
+- `codegen-xml.dsl` - Basic XML template with entity includes
+- `codegen-enhanced.dsl` - **NEW!** Demonstrates all new node-list primitives:
+  - `select-children` for direct child selection
+  - `node-list-filter` for filtering with predicates
+  - `node-list-map` for extracting values
+  - `node-list-some` for conditional logic
+  - `node-list-count` for statistics
 - `lib/string-utils-simple.scm` - Helper functions (no special chars)
 - `lib/string-utils-cdata.scm` - Helper with CDATA (uses `char<?`, `char>=?`, etc.)
 - `lib/java-helpers.scm` - Java code generation helpers
@@ -126,10 +265,10 @@ Entities are expanded automatically by libxml2. See `XML_DSSSL_GUIDE.md` for com
 ## Known Limitations
 
 1. **Process-children** - Context-dependent processing not yet implemented
-   - Workaround: Use `children` + `select-elements` + `map`
+   - Workaround: Use `children` + `select-elements` + `node-list-map`
 
 2. **Advanced grove primitives** - Some DSSSL primitives not yet implemented:
-   - `element-with-id`, `ancestor`, `preced`, `follow`, etc.
+   - `ancestor`, `preced`, `follow`, `follow-sibling`, `preceding-sibling`
    - Can be added if needed for specific use cases
 
 ## Next Steps

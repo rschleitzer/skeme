@@ -27,6 +27,7 @@ pub fn register_grove_primitives(engine: &mut SchemeEngine) -> Result<()> {
     engine.register_fn("parent", grove_parent);
 
     // Node list operations
+    engine.register_fn("node-list", grove_node_list);
     engine.register_fn("node-list-empty?", grove_node_list_empty);
     engine.register_fn("node-list-first", grove_node_list_first);
     engine.register_fn("node-list-rest", grove_node_list_rest);
@@ -39,7 +40,15 @@ pub fn register_grove_primitives(engine: &mut SchemeEngine) -> Result<()> {
 
     // Node list filtering
     engine.register_fn("select-elements", grove_select_elements);
+    engine.register_fn("select-children", grove_select_children);
     engine.register_fn("descendants", grove_descendants);
+
+    // Node list operations
+    engine.register_fn("empty-node-list", grove_empty_node_list);
+    engine.register_fn("node-list-reverse", grove_node_list_reverse);
+
+    // Element lookup
+    engine.register_fn("element-with-id", grove_element_with_id);
 
     Ok(())
 }
@@ -95,6 +104,13 @@ fn grove_parent(node: &Node) -> Option<Node> {
 // NodeList Primitives
 // ============================================================================
 
+/// Create a node-list from a list of nodes
+/// Usage: (node-list node1 node2 node3)
+/// Note: This is typically called via (apply node-list list-of-nodes)
+fn grove_node_list(nodes: Vec<Node>) -> NodeList {
+    NodeList::from_vec(nodes)
+}
+
 /// Check if a node-list is empty
 fn grove_node_list_empty(nl: &NodeList) -> bool {
     nl.is_empty()
@@ -148,6 +164,13 @@ fn grove_select_elements(nl: &NodeList, gi: String) -> NodeList {
     NodeList::from_vec(filtered)
 }
 
+/// Select immediate children with a specific GI
+/// Usage: (select-children node "field")
+fn grove_select_children(node: &Node, gi: String) -> NodeList {
+    let children = node.children();
+    grove_select_elements(&children, gi)
+}
+
 /// Get all descendant nodes (depth-first traversal)
 /// Usage: (descendants node)
 fn grove_descendants(node: &Node) -> NodeList {
@@ -162,6 +185,47 @@ fn grove_descendants(node: &Node) -> NodeList {
     let mut all_descendants = Vec::new();
     collect_descendants(node, &mut all_descendants);
     NodeList::from_vec(all_descendants)
+}
+
+/// Create an empty node-list
+/// Usage: (empty-node-list)
+fn grove_empty_node_list() -> NodeList {
+    NodeList::from_vec(vec![])
+}
+
+/// Reverse a node-list
+/// Usage: (node-list-reverse node-list)
+fn grove_node_list_reverse(nl: &NodeList) -> NodeList {
+    let mut nodes: Vec<Node> = nl.iter().cloned().collect();
+    nodes.reverse();
+    NodeList::from_vec(nodes)
+}
+
+/// Find element by ID attribute anywhere in the tree
+/// Usage: (element-with-id grove "my-id")
+fn grove_element_with_id(grove: &Grove, id: String) -> Option<Node> {
+    fn search_for_id(node: &Node, target_id: &str) -> Option<Node> {
+        // Check current node
+        if node.is_element() {
+            if let Some(node_id) = node.id() {
+                if node_id == target_id {
+                    return Some(node.clone());
+                }
+            }
+        }
+
+        // Search children recursively
+        let children = node.children();
+        for child in children.iter() {
+            if let Some(found) = search_for_id(child, target_id) {
+                return Some(found);
+            }
+        }
+
+        None
+    }
+
+    search_for_id(&grove.root(), &id)
 }
 
 #[cfg(test)]

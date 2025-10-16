@@ -2,7 +2,7 @@
 //!
 //! Sets up Steel Scheme engine and registers all DSSSL primitives
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use steel::steel_vm::engine::Engine;
 use steel::steel_vm::register_fn::RegisterFn;
 use std::collections::HashMap;
@@ -28,7 +28,7 @@ impl SchemeEngine {
         // Register all DSSSL primitives
         primitives::grove::register_grove_primitives(&mut scheme_engine)?;
         primitives::processing::register_processing_primitives(&mut scheme_engine)?;
-        // primitives::util::register_util_primitives(&mut scheme_engine)?;
+        primitives::util::register_util_primitives(&mut scheme_engine)?;
 
         Ok(scheme_engine)
     }
@@ -46,7 +46,14 @@ impl SchemeEngine {
 
     /// Set a variable (from CLI -V flags)
     pub fn set_variable(&mut self, name: String, value: String) {
-        self.variables.insert(name, value);
+        self.variables.insert(name.clone(), value.clone());
+
+        // Also inject into Scheme environment as a global
+        let _ = self.engine.compile_and_run_raw_program(format!(
+            "(define {} \"{}\")",
+            name,
+            value.replace("\"", "\\\"")
+        ));
     }
 
     /// Get a variable value
@@ -56,12 +63,34 @@ impl SchemeEngine {
 
     /// Load and evaluate a Scheme file
     pub fn load_file(&mut self, path: &str) -> Result<()> {
-        todo!("Implement load_file for {}", path)
+        let contents = std::fs::read_to_string(path)
+            .with_context(|| format!("Failed to read Scheme file: {}", path))?;
+
+        self.engine
+            .compile_and_run_raw_program(contents)
+            .map_err(|e| anyhow::anyhow!("Scheme error in {}: {:?}", path, e))?;
+
+        Ok(())
     }
 
-    /// Evaluate a Scheme expression
+    /// Evaluate a Scheme expression and return the result as a string
     pub fn eval(&mut self, expr: &str) -> Result<String> {
-        todo!("Implement eval for: {}", expr)
+        let results = self
+            .engine
+            .compile_and_run_raw_program(expr.to_string())
+            .map_err(|e| anyhow::anyhow!("Scheme error: {:?}", e))?;
+
+        // Return the last result (like a REPL)
+        if let Some(last) = results.last() {
+            Ok(format!("{}", last))
+        } else {
+            Ok(String::from("#<void>"))
+        }
+    }
+
+    /// Get direct access to the Steel engine for advanced operations
+    pub fn engine_mut(&mut self) -> &mut Engine {
+        &mut self.engine
     }
 }
 
@@ -85,5 +114,28 @@ mod tests {
         let mut engine = SchemeEngine::new().unwrap();
         engine.set_variable("foo".to_string(), "bar".to_string());
         assert_eq!(engine.get_variable("foo"), Some("bar"));
+    }
+
+    #[test]
+    fn test_eval_arithmetic() {
+        let mut engine = SchemeEngine::new().unwrap();
+        let result = engine.eval("(+ 2 3)").unwrap();
+        assert_eq!(result, "5");
+    }
+
+    #[test]
+    fn test_eval_string() {
+        let mut engine = SchemeEngine::new().unwrap();
+        let result = engine.eval(r#"(string-append "Hello" " " "World")"#).unwrap();
+        assert!(result.contains("Hello World"));
+    }
+
+    #[test]
+    fn test_grove_primitive_available() {
+        let mut engine = SchemeEngine::new().unwrap();
+        // Test that our registered primitives are available
+        // gi, children, etc. should be defined
+        let result = engine.eval("(procedure? gi)");
+        assert!(result.is_ok());
     }
 }

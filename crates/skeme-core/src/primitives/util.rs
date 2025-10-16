@@ -4,16 +4,20 @@
 
 use crate::scheme::SchemeEngine;
 use anyhow::Result;
+use steel::steel_vm::register_fn::RegisterFn;
+use std::fs;
 
 /// Register all utility primitives
-pub fn register_util_primitives(_engine: &mut SchemeEngine) -> Result<()> {
-    // TODO: Implement utility primitives when needed:
+pub fn register_util_primitives(engine: &mut SchemeEngine) -> Result<()> {
+    // Variable access
+    // Note: We need to wrap get_variable in a closure to capture the engine reference
+    // For now, we'll handle this differently - see SchemeEngine::register_variable_access
+
+    // TODO: Implement other utility primitives when needed:
+    // - load (will be built-in via Steel or via engine wrapper)
     // - keyword?, keyword->string, string->keyword
     // - time, time->string
     // - error, debug
-    // - get-variable (CLI variables)
-    //
-    // For Phase 1 MVP, these are not critical.
 
     Ok(())
 }

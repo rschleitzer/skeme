@@ -110,20 +110,79 @@ impl SchemeEngine {
         None
     }
 
-    /// Load and evaluate a Scheme file
+    /// Load and evaluate a Scheme file or XML-embedded DSSSL
     pub fn load_file(&mut self, path: &str) -> Result<()> {
         // Try to find the file in search paths
         let file_path = self.find_in_search_paths(path)
             .ok_or_else(|| anyhow::anyhow!("File not found in search paths: {}", path))?;
 
         let contents = std::fs::read_to_string(&file_path)
-            .with_context(|| format!("Failed to read Scheme file: {}", file_path.display()))?;
+            .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
+
+        // Detect if this is XML or pure Scheme
+        let scheme_code = if contents.trim_start().starts_with("<") {
+            // XML-embedded DSSSL - extract from <style-specification>
+            self.extract_dsssl_from_xml(&file_path)?
+        } else {
+            // Pure Scheme file
+            contents
+        };
 
         self.engine
-            .compile_and_run_raw_program(contents)
+            .compile_and_run_raw_program(scheme_code)
             .map_err(|e| anyhow::anyhow!("Scheme error in {}: {:?}", file_path.display(), e))?;
 
         Ok(())
+    }
+
+    /// Extract DSSSL code from XML style-sheet
+    /// Handles entity expansion automatically via libxml2
+    fn extract_dsssl_from_xml(&self, file_path: &std::path::Path) -> Result<String> {
+        use libxml::bindings::{xmlReadFile, xmlParserOption_XML_PARSE_NOENT, xmlParserOption_XML_PARSE_DTDLOAD};
+        use libxml::tree::Document;
+        use libxml::xpath::Context;
+        use std::ffi::CString;
+
+        // Parse XML with entity substitution using xmlReadFile directly
+        let path_cstr = CString::new(file_path.to_str().unwrap())
+            .map_err(|_| anyhow::anyhow!("Invalid path"))?;
+
+        let doc_ptr = unsafe {
+            xmlReadFile(
+                path_cstr.as_ptr(),
+                std::ptr::null(),
+                (xmlParserOption_XML_PARSE_NOENT | xmlParserOption_XML_PARSE_DTDLOAD) as i32,  // Enable entity substitution and DTD loading
+            )
+        };
+
+        if doc_ptr.is_null() {
+            anyhow::bail!("Failed to parse XML template: {}", file_path.display());
+        }
+
+        // Wrap in Document for safe handling (Document's Drop will free the doc)
+        let doc = Document::new_ptr(doc_ptr);
+
+        // Use XPath to find <style-specification> element
+        let context = Context::new(&doc)
+            .map_err(|_| anyhow::anyhow!("Failed to create XPath context"))?;
+
+        let result = context
+            .evaluate("//style-specification")
+            .map_err(|_| anyhow::anyhow!("XPath evaluation failed"))?;
+
+        let nodes = result.get_nodes_as_vec();
+
+        if nodes.is_empty() {
+            anyhow::bail!("No <style-specification> element found in XML template");
+        }
+
+        // Extract text content (entities now expanded by libxml2)
+        let node = &nodes[0];
+        let text = node.get_content();
+
+        // Document's Drop will clean up automatically
+
+        Ok(text)
     }
 
     /// Evaluate a Scheme expression and return the result as a string

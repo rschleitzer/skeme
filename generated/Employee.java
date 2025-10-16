@@ -7,16 +7,29 @@ public class Employee {
     private String department;
     private double salary;
 
-    public long getId() {
-        // TODO: Implement
-        return null;
+    public long getEmployeeId() {
+        return employeeId;
     }
     public String getName() {
-        // TODO: Implement
-        return null;
+        return name;
     }
-    public double calculateBonus() {
-        // TODO: Implement
-        return null;
+    public String getDepartment() {
+        return department;
+    }
+    public double getSalary() {
+        return salary;
+    }
+
+    public void setEmployeeId(long employeeId) {
+        this.employeeId = employeeId;
+    }
+    public void setName(String name) {
+        this.name = name;
+    }
+    public void setDepartment(String department) {
+        this.department = department;
+    }
+    public void setSalary(double salary) {
+        this.salary = salary;
     }
 }

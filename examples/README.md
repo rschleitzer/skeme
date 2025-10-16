@@ -84,17 +84,51 @@ All R5RS primitives are available:
 - **Variables** - `-V key=value` flags injected as Scheme variables
 - **Auto directory creation** - Output directories created automatically
 
+## Code Reuse with XML Entities
+
+Skeme supports **XML-embedded DSSSL templates** with entity expansion for sharing helper code:
+
+### Quick Example
+
+```xml
+<?xml version="1.0"?>
+<!DOCTYPE style-sheet [
+  <!ENTITY helpers SYSTEM "lib/helpers.scm">
+]>
+<style-sheet>
+  <style-specification>
+&helpers;
+
+(define code (use-helper-function))
+  </style-specification>
+</style-sheet>
+```
+
+### Running
+
+```bash
+skeme -D lib -d template.dsl input.xml
+```
+
+Entities are expanded automatically by libxml2. See `XML_DSSSL_GUIDE.md` for complete documentation.
+
+### Examples with Entities
+
+- `codegen-xml-v2.dsl` - XML template with entity includes
+- `codegen-xml-cdata.dsl` - Template using CDATA-protected helpers
+- `codegen-xml-mixed.dsl` - CDATA in main template and helpers
+- `lib/string-utils-simple.scm` - Helper functions (no special chars)
+- `lib/string-utils-cdata.scm` - Helper with CDATA (uses `char<?`, `char>=?`, etc.)
+- `lib/java-helpers.scm` - Java code generation helpers
+
+**Tip**: Use `<![CDATA[...]]>` anywhere you need `<` and `>` characters. Entity refs (`&name;`) must be outside CDATA.
+
 ## Known Limitations
 
-1. **Load primitive** - Runtime `(load "file.scm")` is not feasible with Steel's evaluation model
-   - Steel's `eval-string` uses isolated environments, so definitions don't propagate
-   - **Recommended approach**: Inline helper functions directly in templates
-   - Templates remain self-contained and easier to understand
-
-2. **Process-children** - Context-dependent processing not yet implemented
+1. **Process-children** - Context-dependent processing not yet implemented
    - Workaround: Use `children` + `select-elements` + `map`
 
-3. **Advanced grove primitives** - Some DSSSL primitives not yet implemented:
+2. **Advanced grove primitives** - Some DSSSL primitives not yet implemented:
    - `element-with-id`, `ancestor`, `preced`, `follow`, etc.
    - Can be added if needed for specific use cases
 

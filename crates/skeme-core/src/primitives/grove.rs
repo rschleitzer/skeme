@@ -31,6 +31,7 @@ pub fn register_grove_primitives(engine: &mut SchemeEngine) -> Result<()> {
     engine.register_fn("node-list-first", grove_node_list_first);
     engine.register_fn("node-list-rest", grove_node_list_rest);
     engine.register_fn("node-list-length", grove_node_list_length);
+    engine.register_fn("node-list->list", grove_node_list_to_list);
 
     // Type predicates
     engine.register_fn("element?", grove_element_p);
@@ -112,6 +113,11 @@ fn grove_node_list_rest(nl: &NodeList) -> NodeList {
 /// Get the length of a node-list
 fn grove_node_list_length(nl: &NodeList) -> usize {
     nl.len()
+}
+
+/// Convert a node-list to a Scheme list
+fn grove_node_list_to_list(nl: &NodeList) -> Vec<Node> {
+    nl.iter().cloned().collect()
 }
 
 // ============================================================================

@@ -29,6 +29,67 @@ Basic template demonstrating:
 ./target/release/skeme -d examples/hello.scm examples/hello.xml
 ```
 
+### simple-true-dsssl.scm - **TRUE DSSSL!** ✓
+
+Authentic DSSSL syntax - OpenJade compatible!
+- **`(element gi body...)`** - Real DSSSL syntax (no explicit lambdas)
+- **`(make sequence ...)`** - Flow object construction
+- **`(make entity system-id: "file" ...)`** - File output
+- `process-children` recursion
+- Default rule handling
+
+```bash
+./target/release/skeme -d examples/simple-true-dsssl.scm examples/class.xml
+```
+
+### true-dsssl.scm - **TRUE DSSSL!** ✓
+
+Full Java code generator with TRUE DSSSL syntax:
+- Authentic DSSSL construction rules
+- OpenJade-compatible syntax
+- Hash table rule lookup (O(1) performance)
+- Helper function includes
+
+```bash
+./target/release/skeme -d examples/true-dsssl.scm examples/class.xml
+```
+
+### true-dsssl.dsl - **TRUE DSSSL + XML!** ✓
+
+XML-embedded TRUE DSSSL template:
+- Authentic DSSSL in XML `<style-specification>`
+- Entity includes for helper functions
+- OpenJade-compatible construction rules
+- Ready for migration from OpenJade!
+
+```bash
+./target/release/skeme -d examples/true-dsssl.dsl examples/class.xml
+```
+
+### simple-modes.scm - **DSSSL MODES!** ✓
+
+Demonstrates DSSSL processing modes:
+- Same element processed differently in different contexts
+- `(mode name ...)` to define mode-specific rules
+- `(with-mode name body)` to switch modes
+- Perfect for generating TOC + content, summaries + details
+
+```bash
+./target/release/skeme -d examples/simple-modes.scm examples/class.xml
+```
+
+### modes-example.scm - **ADVANCED MODES!** ✓
+
+Full Java generator using modes:
+- TOC mode for table of contents
+- Default mode for full implementation
+- Shows real-world mode usage
+- OpenJade-compatible mode semantics
+
+```bash
+./target/release/skeme -d examples/modes-example.scm examples/class.xml
+```
+
 ### demo.scm
 
 More comprehensive demonstration:
@@ -40,6 +101,88 @@ More comprehensive demonstration:
 ```bash
 ./target/release/skeme -d examples/demo.scm -V project=myapp examples/hello.xml
 ```
+
+## TRUE DSSSL Construction Rules
+
+Skeme supports **authentic DSSSL syntax** - fully compatible with OpenJade!
+
+```scheme
+;; Define rules for each element type - TRUE DSSSL SYNTAX!
+;; Notice: NO explicit (lambda () ...) wrappers
+
+(element class
+  (make entity
+    system-id: (string-append "generated/" (attribute-string current-node "name") ".java")
+    (make sequence
+      (literal "public class ")
+      (literal (attribute-string current-node "name"))
+      (literal " {\n")
+      (process-children)
+      (literal "}\n"))))
+
+(element field
+  (make sequence
+    (literal "  private ")
+    (literal (attribute-string current-node "type"))
+    (literal " ")
+    (literal (attribute-string current-node "name"))
+    (literal ";\n")))
+
+;; Default rule for unmatched elements
+(default (process-children))
+
+;; Start processing from root
+(process-root)
+```
+
+### Key Features:
+
+- **`(element gi body...)`** - TRUE DSSSL syntax (GI as symbol, not string!)
+- **`(make flow-class characteristics... content...)`** - Flow object construction
+- **`(make sequence ...)`** - Concatenate sosofos
+- **`(make entity system-id: "file.txt" ...)`** - Write to file
+- **`(process-children)`** - Recursively apply rules to children
+- **`(process-root)`** - Start processing from document root
+- **`(default body...)`** - Fallback rule for unmatched elements
+- **`current-node`** - Automatically rebound during rule execution
+- **Association list rule lookup** - O(n) but works with all Scheme implementations
+
+See `examples/simple-true-dsssl.scm` and `examples/true-dsssl.dsl` for complete examples.
+
+## DSSSL Modes - **NEW!**
+
+Process the same element differently in different contexts using **modes**:
+
+```scheme
+;; Default mode - full details
+(element field
+  (literal (string-append "Field: " (attribute-string current-node "name") "\n")))
+
+;; Summary mode - just names
+(mode summary
+  (element field
+    (literal (string-append "  - " (attribute-string current-node "name") "\n")))
+
+  (default (process-children)))
+
+;; Use modes
+(element class
+  (make sequence
+    (literal "SUMMARY:\n")
+    (with-mode summary (process-children))  ;; Process in summary mode
+    (literal "\nDETAILS:\n")
+    (process-children)))                     ;; Process in default mode
+```
+
+### Mode Features:
+
+- **`(mode name rules...)`** - Define mode-specific rules
+- **`(with-mode name body...)`** - Process with specific mode active
+- **Nested modes** - Modes can switch to other modes
+- **Per-mode defaults** - Each mode can have its own default rule
+- **OpenJade compatible** - Authentic DSSSL mode semantics
+
+See `examples/simple-modes.scm` and `examples/modes-example.scm` for complete examples.
 
 ## Available Primitives
 
@@ -94,6 +237,33 @@ More comprehensive demonstration:
 - `make-entity` - Create entity flow object (file output)
 - `make-formatting-instruction` - Create formatting instruction (text output)
 - `write-sosofo` - Write sosofo to its associated file
+
+### DSSSL Construction Rules (TRUE DSSSL!) - **NEW!**
+
+**Macros (authentic DSSSL syntax):**
+- **`(element gi body...)`** - Define construction rule (GI as symbol, NOT string!)
+- **`(make flow-class characteristics... content...)`** - Create flow object
+  - `(make sequence ...)` - Concatenate sosofos
+  - `(make entity system-id: "file.txt" ...)` - Write to file
+- **`(default body...)`** - Define default rule for unmatched elements
+
+**Mode support (OpenJade compatible):**
+- **`(mode name rules...)`** - Define mode-specific rules
+- **`(with-mode name body...)`** - Process in specific mode
+- Modes enable different processing for same elements in different contexts
+- Each mode has its own element rules and default rule
+- Modes can be nested (switch modes within modes)
+
+**Processing functions:**
+- `process-root` - Start processing from document root
+- `process-children` - Process children of current-node
+- `process-node` - Apply construction rule to specific node
+- `process-node-list` - Apply construction rules to node-list
+
+**Performance:**
+- Association list rule lookup - O(n) per mode
+- Optimized for typical template sizes
+- Compatible with OpenJade construction rule semantics
 
 ### R5RS Scheme (via Steel)
 All R5RS primitives are available:
@@ -264,23 +434,68 @@ Entities are expanded automatically by libxml2. See `XML_DSSSL_GUIDE.md` for com
 
 ## Known Limitations
 
-1. **Process-children** - Context-dependent processing not yet implemented
-   - Workaround: Use `children` + `select-elements` + `node-list-map`
+1. **Pattern matching** - Advanced pattern matching in element rules
+   - DSSSL supports complex patterns: `(element (or field method) ...)`
+   - Skeme currently uses simple GI symbol matching
+   - Can be added if needed for specific use cases
 
 2. **Advanced grove primitives** - Some DSSSL primitives not yet implemented:
    - `ancestor`, `preced`, `follow`, `follow-sibling`, `preceding-sibling`
    - Can be added if needed for specific use cases
 
+3. **Flow object characteristics** - Limited flow object support
+   - DSSSL has rich characteristics: `font-size:`, `font-weight:`, etc.
+   - Skeme focuses on code generation (sequence, entity)
+   - Document formatting flow objects can be added if needed
+
 ## Next Steps
 
-- Add `process-children` for context-dependent processing (if needed)
-- More grove primitives as specific use cases require them
-- Performance optimization for large documents
-- Standard library of common patterns (as inline examples)
+- Add pattern matching for element rules: `(element (or field method) ...)`
+- Add more grove primitives as specific use cases require them:
+  - `ancestor`, `preceding-sibling`, `following-sibling`
+  - `preced`, `follow` (document order navigation)
+- Performance optimization for very large documents
+- Standard library of common patterns
+- More flow object classes if document formatting needed
 
 ## Template Structure
 
-A typical Skeme template:
+Skeme supports two styles of templates:
+
+### Style 1: TRUE DSSSL (Construction Rules) - Recommended!
+
+```scheme
+;; Authentic DSSSL syntax - compatible with OpenJade!
+;; Notice: GI is a SYMBOL, not a string
+;; Notice: NO explicit (lambda () ...) wrappers
+
+(element class
+  (make entity
+    system-id: (string-append "generated/" (attribute-string current-node "name") ".java")
+    (make sequence
+      (literal "public class ")
+      (literal (attribute-string current-node "name"))
+      (literal " {\n")
+      (process-children)
+      (literal "}\n"))))
+
+(element field
+  (make sequence
+    (literal "  private ")
+    (literal (attribute-string current-node "type"))
+    (literal " ")
+    (literal (attribute-string current-node "name"))
+    (literal ";\n")))
+
+(default (process-children))
+
+;; Start processing
+(process-root)
+```
+
+### Style 2: Imperative (Direct Navigation)
+
+A typical imperative Skeme template:
 
 ```scheme
 ;; Access the XML root (automatically available as current-root)

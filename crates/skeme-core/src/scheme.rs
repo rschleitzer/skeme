@@ -18,7 +18,17 @@ pub struct SchemeEngine {
 
 /// Prelude code that defines helper functions
 const PRELUDE: &str = r#"
+;; ============================================================================
+;; Global Variables
+;; ============================================================================
+
+;; current-root and current-node will be set when grove is loaded
+(define current-root #f)
+(define current-node #f)
+
+;; ============================================================================
 ;; Node-list operations with predicates
+;; ============================================================================
 
 (define (node-list-filter pred nl)
   "Filter node-list by predicate function"
@@ -63,6 +73,179 @@ const PRELUDE: &str = r#"
 (define (node-list-contains? nl node)
   "Check if node-list contains a specific node"
   (node-list-some (lambda (n) (equal? n node)) nl))
+
+;; ============================================================================
+;; DSSSL Construction Rules System with MODES
+;; ============================================================================
+
+;; Mode registry: nested association lists
+;; Structure: ((mode-symbol . ((gi-symbol . procedure) ...)) ...)
+;; Default mode is symbol 'default-mode
+(define *modes* '((default-mode . ())))
+
+;; Default rules (per mode): ((mode-symbol . procedure) ...)
+(define *default-rules* '())
+
+;; Track which mode we're DEFINING rules for
+(define *defining-mode* 'default-mode)
+
+;; Track which mode we're PROCESSING with
+(define *processing-mode* 'default-mode)
+
+;; ============================================================================
+;; Helper Functions for Mode Management
+;; ============================================================================
+
+;; Get rules alist for a mode
+(define (get-mode-rules mode-symbol)
+  (let ((entry (assq mode-symbol *modes*)))
+    (if entry
+        (cdr entry)
+        '())))
+
+;; Set rules alist for a mode (functional - rebuilds list)
+(define (set-mode-rules! mode-symbol rules-alist)
+  (define (update-alist alist)
+    (cond
+      ((null? alist) (list (cons mode-symbol rules-alist)))
+      ((eq? (caar alist) mode-symbol) (cons (cons mode-symbol rules-alist) (cdr alist)))
+      (else (cons (car alist) (update-alist (cdr alist))))))
+  (set! *modes* (update-alist *modes*)))
+
+;; Register element rule in specific mode
+(define (register-element-rule mode-symbol gi-symbol proc)
+  (let ((rules (get-mode-rules mode-symbol)))
+    (set-mode-rules! mode-symbol (cons (cons gi-symbol proc) rules))))
+
+;; Register default rule for specific mode (functional - rebuilds list)
+(define (register-default-rule mode-symbol proc)
+  (define (update-alist alist)
+    (cond
+      ((null? alist) (list (cons mode-symbol proc)))
+      ((eq? (caar alist) mode-symbol) (cons (cons mode-symbol proc) (cdr alist)))
+      (else (cons (car alist) (update-alist (cdr alist))))))
+  (set! *default-rules* (update-alist *default-rules*)))
+
+;; ============================================================================
+;; TRUE DSSSL MACROS
+;; ============================================================================
+
+;; element macro: (element gi body...)
+;; Registers rule in current *defining-mode*
+(define-syntax element
+  (syntax-rules ()
+    ((element gi body ...)
+     (register-element-rule *defining-mode*
+                            (quote gi)
+                            (lambda () body ...)))))
+
+;; default macro: (default body...)
+;; Registers default rule in current *defining-mode*
+(define-syntax default
+  (syntax-rules ()
+    ((default body ...)
+     (register-default-rule *defining-mode*
+                             (lambda () body ...)))))
+
+;; mode macro: (mode name rule-definition...)
+;; Temporarily sets *defining-mode* while defining rules
+(define-syntax mode
+  (syntax-rules ()
+    ((mode mode-name body ...)
+     (let ((saved-defining-mode *defining-mode*))
+       (set! *defining-mode* (quote mode-name))
+       body ...
+       (set! *defining-mode* saved-defining-mode)))))
+
+;; with-mode macro: (with-mode name body...)
+;; Temporarily sets *processing-mode* while executing body
+(define-syntax with-mode
+  (syntax-rules ()
+    ((with-mode mode-name body ...)
+     (let ((saved-processing-mode *processing-mode*))
+       (set! *processing-mode* (quote mode-name))
+       (let ((result (begin body ...)))
+         (set! *processing-mode* saved-processing-mode)
+         result)))))
+
+;; make macro: (make flow-class characteristics... content...)
+;; Simplified for code generation - characteristics are keyword: value pairs
+(define-syntax make
+  (syntax-rules (sequence entity system-id:)
+    ;; (make sequence content...) - just concatenate sosofos
+    ((make sequence content ...)
+     (sosofo-append content ...))
+
+    ;; (make entity system-id: "file.txt" content...)
+    ((make entity system-id: filename content ...)
+     (make-entity filename (sosofo-append content ...)))
+
+    ;; Fallback: treat as sequence
+    ((make flow-class content ...)
+     (sosofo-append content ...))))
+
+;; ============================================================================
+;; Processing Functions (Mode-Aware)
+;; ============================================================================
+
+;; Find rule for a given GI in current processing mode
+(define (find-rule gi-symbol)
+  "Look up construction rule by GI symbol in current processing mode"
+  (let ((rules (get-mode-rules *processing-mode*)))
+    (let ((entry (assq gi-symbol rules)))
+      (if entry
+          (cdr entry)
+          #f))))
+
+;; Find default rule for current processing mode
+(define (find-default-rule)
+  "Look up default rule for current processing mode"
+  (let ((entry (assq *processing-mode* *default-rules*)))
+    (if entry
+        (cdr entry)
+        #f)))
+
+;; Process a single node by applying its construction rule
+(define (process-node node)
+  "Apply construction rule to a node (mode-aware)"
+  (if (element? node)
+      (let ((gi-symbol (string->symbol (gi node)))
+            (saved-node current-node))
+        ;; Rebind current-node for this rule's execution
+        (set! current-node node)
+        (let ((rule (find-rule gi-symbol)))
+          (let ((result (cond
+                          ;; Element has specific rule in current mode
+                          ((procedure? rule) (rule))
+                          ;; Use default rule for current mode if defined
+                          ((find-default-rule) => (lambda (default) (default)))
+                          ;; No rule: return empty
+                          (else (empty-sosofo)))))
+            ;; Restore previous current-node
+            (set! current-node saved-node)
+            result)))
+      ;; Text nodes: return empty (or could return their content)
+      (empty-sosofo)))
+
+;; Process all children of current-node
+(define (process-children)
+  "Process children of current-node using construction rules"
+  (let ((child-nodes (children current-node)))
+    (process-node-list child-nodes)))
+
+;; Process a node-list (optimized for performance)
+(define (process-node-list nl)
+  "Process each node in node-list and combine results"
+  (if (node-list-empty? nl)
+      (empty-sosofo)
+      (sosofo-append
+        (process-node (node-list-first nl))
+        (process-node-list (node-list-rest nl)))))
+
+;; Process starting from root
+(define (process-root)
+  "Start processing from current-root"
+  (process-node current-root))
 "#;
 
 impl SchemeEngine {

@@ -199,40 +199,14 @@ From OpenJade analysis, Skeme needs:
 
 ### Steel Provides (R5RS Standard): ~90 primitives ✓
 
-These are **already implemented** in Steel Scheme:
-
-**Lists & Pairs** (15):
-- `cons`, `car`, `cdr`, `list`, `append`, `reverse`, `length`
-- `list-tail`, `list-ref`, `member`, `memv`, `assoc`
-- `null?`, `pair?`, `list?`
-
-**Strings** (14):
-- `string`, `string-length`, `string=?`, `string<?`, `string<=?`
-- `string-append`, `string-ref`, `substring`
-- `symbol->string`, `string->symbol`
-- `string->list`, `list->string`
-
-**Numbers & Math** (42):
-- Arithmetic: `+`, `-`, `*`, `/`, `quotient`, `remainder`, `modulo`
-- Comparison: `=`, `<`, `>`, `<=`, `>=`
-- Functions: `min`, `max`, `floor`, `ceiling`, `truncate`, `round`, `abs`
-- Transcendental: `sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `expt`
-- Conversions: `number->string`, `string->number`, `exact->inexact`, `inexact->exact`
-
-**Predicates** (14):
-- `symbol?`, `boolean?`, `procedure?`, `string?`, `char?`
-- `number?`, `integer?`, `real?`
-- `exact?`, `inexact?`, `zero?`, `positive?`, `negative?`, `odd?`, `even?`
-
-**Logic & Comparison** (3):
-- `not`, `equal?`, `eqv?`
-
-**Characters** (5):
-- `char=?`, `char<?`, `char<=?`, `char-upcase`, `char-downcase`
-
-**Vectors (R5RS)** (8):
-- `vector?`, `vector`, `vector-ref`, `vector-set!`
-- `make-vector`, `vector->list`, `list->vector`, `vector-fill!`
+**Already implemented** in Steel Scheme:
+- **Lists** (15): `cons`, `car`, `cdr`, `list`, `append`, `reverse`, `length`, `list-tail`, `list-ref`, `member`, `memv`, `assoc`, `null?`, `pair?`, `list?`
+- **Strings** (14): `string`, `string-length`, `string=?`, `string<?`, `string<=?`, `string-append`, `string-ref`, `substring`, `symbol->string`, `string->symbol`, `string->list`, `list->string`
+- **Numbers** (42): Arithmetic, comparison, transcendental functions, conversions
+- **Predicates** (14): Type checks for symbol, boolean, procedure, string, char, number, etc.
+- **Logic** (3): `not`, `equal?`, `eqv?`
+- **Characters** (5): Comparison and case conversion
+- **Vectors** (8): `vector?`, `vector`, `vector-ref`, `vector-set!`, `make-vector`, conversions
 
 ### Skeme Must Implement: ~134 primitives
 
@@ -240,224 +214,52 @@ Organized by priority and function:
 
 #### **CRITICAL: Grove Query Functions** (~50 primitives)
 
-XML tree navigation and querying:
+XML tree navigation and querying - see DSSSL spec Section 9 (SDQL) for details:
 
-```scheme
-;; Current context
-(current-node)                              ; Current node being processed
-
-;; Node list operations
-(node-list? obj)                            ; Is this a node list?
-(node-list-empty? nl)                       ; Is node list empty?
-(node-list-first nl)                        ; First node
-(node-list-rest nl)                         ; Rest of list
-(node-list nl ...)                          ; Create node list
-(node-list-length nl)                       ; Length
-(node-list-ref nl n)                        ; Get nth node
-(node-list-reverse nl)                      ; Reverse
-(node-list-map proc nl)                     ; Map over nodes
-(node-list=? nl1 nl2)                       ; Compare
-(empty-node-list)                           ; Empty list
-
-;; Node properties
-(gi [node])                                 ; Element name (GI = Generic Identifier)
-(id [node])                                 ; ID attribute
-(data node)                                 ; Text content
-(node-property propname node [default])     ; Get property
-
-;; Tree navigation
-(parent [node])                             ; Parent node
-(ancestor gi [node])                        ; Ancestor with GI
-(children node)                             ; Child nodes
-(descendants node)                          ; All descendants
-(follow node)                               ; Following siblings
-(preced node)                               ; Preceding siblings
-(attributes node)                           ; Attribute nodes
-
-;; Selection & filtering
-(select-elements nl patterns)               ; Select by patterns
-(select-by-class nl class)                  ; Select by class
-(element-with-id id [node])                 ; Find by ID
-(match-element? pattern node)               ; Pattern match
-
-;; Attributes
-(attribute-string name [node])              ; Get attribute value
-(inherited-attribute-string name [node])    ; Inherited attribute
-(inherited-element-attribute-string gi name [node]) ; From ancestor
-
-;; Position predicates
-(first-sibling? [node])                     ; Is first sibling?
-(last-sibling? [node])                      ; Is last sibling?
-(absolute-first-sibling? [node])            ; Absolutely first?
-(absolute-last-sibling? [node])             ; Absolutely last?
-(have-ancestor? gi [node])                  ; Has ancestor?
-
-;; Numbering (for auto-numbering)
-(child-number [node])                       ; Position among siblings
-(ancestor-child-number gi [node])           ; Ancestor position
-(element-number [node])                     ; Number of this type
-(element-number-list gi-list [node])        ; Multi-level numbering
-(hierarchical-number gi-list [node])        ; Hierarchical (1.2.3)
-(hierarchical-number-recursive gi [node])   ; Recursive hierarchical
-(first-child-gi [node])                     ; GI of first child
-
-;; Entity operations
-(entity-system-id name [node])              ; Entity system ID
-(entity-public-id name [node])              ; Entity public ID
-(entity-generated-system-id name [node])    ; Generated system ID
-(entity-text name [node])                   ; Entity text
-(entity-notation name [node])               ; Entity notation
-(entity-type name [node])                   ; Entity type
-(entity-attribute-string name attr [node])  ; Entity attribute
-
-;; Notation operations
-(notation-system-id name [node])            ; Notation system ID
-(notation-public-id name [node])            ; Notation public ID
-(notation-generated-system-id name [node])  ; Generated system ID
-
-;; Name normalization
-(general-name-normalize name [node])        ; Normalize name
-(entity-name-normalize name [node])         ; Normalize entity name
-```
+- **Context**: `current-node`
+- **Node lists**: `node-list?`, `node-list-empty?`, `node-list-first`, `node-list-rest`, `node-list`, `node-list-length`, `node-list-ref`, `node-list-reverse`, `node-list-map`, `node-list=?`, `empty-node-list`
+- **Properties**: `gi` (element name), `id`, `data` (text), `node-property`
+- **Navigation**: `parent`, `ancestor`, `children`, `descendants`, `follow`, `preced`, `attributes`
+- **Selection**: `select-elements`, `select-by-class`, `element-with-id`, `match-element?`
+- **Attributes**: `attribute-string`, `inherited-attribute-string`, `inherited-element-attribute-string`
+- **Position**: `first-sibling?`, `last-sibling?`, `absolute-first-sibling?`, `absolute-last-sibling?`, `have-ancestor?`
+- **Numbering**: `child-number`, `ancestor-child-number`, `element-number`, `element-number-list`, `hierarchical-number`, `hierarchical-number-recursive`, `first-child-gi`
+- **Entities**: `entity-system-id`, `entity-public-id`, `entity-generated-system-id`, `entity-text`, `entity-notation`, `entity-type`, `entity-attribute-string`
+- **Notations**: `notation-system-id`, `notation-public-id`, `notation-generated-system-id`
+- **Normalization**: `general-name-normalize`, `entity-name-normalize`
 
 #### **HIGH: Processing & Sosofo** (~20 primitives)
 
-Control code generation flow:
-
-```scheme
-;; Processing control
-(process-children)                          ; Process child nodes
-(process-children-trim)                     ; Process, trim whitespace
-(process-node-list nl)                      ; Process node list
-(process-element-with-id id)                ; Process by ID
-(process-matching-children patterns ...)    ; Process matching children
-(process-first-descendant patterns ...)     ; Process first descendant
-(next-match [style])                        ; Continue to next rule
-
-;; Sosofo (Specification of Sequence of Flow Objects)
-(sosofo? obj)                               ; Is sosofo?
-(empty-sosofo)                              ; Empty sosofo
-(sosofo-append sosofo ...)                  ; Append sosofos
-(literal str ...)                           ; Output literal text
-(sosofo-label label sosofo)                 ; Label sosofo
-(sosofo-discard-labeled label sosofo)       ; Discard labeled
-
-;; Formatting
-(format-number n format)                    ; Format number (I, II, III, 1, 2, 3, a, b, c)
-(format-number-list nums sep format)        ; Format list (1.2.3)
-
-;; Page numbers (may not need for code generation)
-(current-node-page-number-sosofo)           ; Current page number
-(page-number-sosofo)                        ; Page number sosofo
-```
+- **Processing**: `process-children`, `process-children-trim`, `process-node-list`, `process-element-with-id`, `process-matching-children`, `process-first-descendant`, `next-match`
+- **Sosofo**: `sosofo?`, `empty-sosofo`, `sosofo-append`, `literal`, `sosofo-label`, `sosofo-discard-labeled`
+- **Formatting**: `format-number` (I/II/III, 1/2/3, a/b/c), `format-number-list` (1.2.3)
+- **Page numbers**: `current-node-page-number-sosofo`, `page-number-sosofo` (may not need)
 
 #### **MEDIUM: DSSSL Types** (~30 primitives) - **MOSTLY STUBS**
 
-**User's use case**: Only `entity` and `formatting-instruction` flow objects for plain text code generation.
+Only `entity` and `formatting-instruction` flow objects needed for code generation. Most types implemented as stubs:
 
-**Result**: Most DSSSL types are **NOT NEEDED**. Implement as stubs returning defaults.
+- **Quantities** (4): `quantity?`, `table-unit`, `quantity->number`, `quantity->string` - Return dummy values
+- **Spacing** (5): `display-space?`, `display-space`, `inline-space?`, `inline-space`, `display-size` - Return dummy values
+- **Colors** (4): `color?`, `color`, `color-space?`, `color-space` - Return dummy values
+- **Addresses** (8): `address?`, `address-local?`, `address-visited?`, `current-node-address`, `idref-address`, `entity-address`, `sgml-document-address`, `node-list-address` - Return dummy values
+- **Glyphs** (5): `glyph-id?`, `glyph-id`, `glyph-subst-table?`, `glyph-subst-table`, `glyph-subst` - Return dummy values
+- **Character properties** (2): `char-property`, `char-script-case` - Implement if needed for case conversion
 
-```scheme
-;; Quantities (12pt, 2em, etc.) - ❌ NOT NEEDED (document layout)
-(quantity? obj)                             ; Stub: always #f
-(table-unit n)                              ; Stub: return simple wrapper
-(quantity->number q)                        ; Stub: return 0
-(quantity->string q [unit])                 ; Stub: return "0"
-
-;; Spacing - ❌ NOT NEEDED (typographic layout)
-(display-space? obj)                        ; Stub: always #f
-(display-space min [opt max])               ; Stub: return dummy object
-(inline-space? obj)                         ; Stub: always #f
-(inline-space min [opt max])                ; Stub: return dummy object
-(display-size)                              ; Stub: return (0 0)
-
-;; Colors - ❌ NOT NEEDED (no styling in plain code files)
-(color? obj)                                ; Stub: always #f
-(color colorspace components ...)           ; Stub: return dummy object
-(color-space? obj)                          ; Stub: always #f
-(color-space name)                          ; Stub: return dummy object
-
-;; Addresses - 🔸 MAYBE (cross-references in docs?)
-(address? obj)                              ; Stub: always #f
-(address-local? addr)                       ; Stub: always #t
-(address-visited? addr)                     ; Stub: always #f
-(current-node-address)                      ; Could return node ID if needed
-(idref-address idref)                       ; Stub: return dummy
-(entity-address name)                       ; Stub: return dummy
-(sgml-document-address sysid docgi)         ; Stub: return dummy
-(node-list-address nl)                      ; Stub: return dummy
-
-;; Glyphs - 🔸 MAYBE (special chars in identifiers?)
-(glyph-id? obj)                             ; Stub: always #f
-(glyph-id pubid str)                        ; Stub: return dummy
-(glyph-subst-table? obj)                    ; Stub: always #f
-(glyph-subst-table alist)                   ; Stub: return dummy
-(glyph-subst glyph table)                   ; Stub: return glyph unchanged
-
-;; Character properties - 🔸 MAYBE (char classification)
-(char-property char prop [lang])            ; Could implement for case conversion
-(char-script-case char default ...)         ; Stub: return default
-```
-
-**Implementation priority**: All stubs initially (1-2 days), implement properly only if actually used in templates.
+**Implementation**: All stubs initially (1-2 days), implement properly only if templates use them.
 
 #### **LOW: Extensions & Utilities** (~20 primitives)
 
-OpenJade-specific or less common:
-
-```scheme
-;; Keywords
-(keyword? obj)                              ; Is keyword?
-(keyword->string kw)                        ; To string
-(string->keyword str)                       ; From string
-
-;; Time
-(time)                                      ; Current time
-(time->string time [format])                ; Format time
-(time<? t1 t2)                              ; Compare
-(time>? t1 t2)
-(time<=? t1 t2)
-(time>=? t1 t2)
-
-;; Language
-(language? obj)                             ; Is language?
-(current-language)                          ; Get current
-(with-language lang proc)                   ; Execute with language
-(language code country)                     ; External proc
-
-;; Style
-(style? obj)                                ; Is style?
-(merge-style styles ...)                    ; Merge styles
-(map-constructor name proc)                 ; Map constructor
-
-;; Parsing
-(sgml-parse sysid [args ...])               ; Parse document
-
-;; Debug/error
-(error msg)                                 ; Signal error
-(external-procedure name)                   ; Get external proc
-(read-entity name)                          ; Read entity
-(debug obj)                                 ; Debug output
-
-;; Named node lists (rarely used)
-(named-node-list? obj)
-(named-node name nnl)
-(named-node-list-names nnl)
-(named-node-list-normalize nnl names norm)
-(node-list-no-order nl)
-(node-list-error msg default)
-
-;; Page conditionals
-(if-first-page then else)                   ; First page?
-(if-front-page then else)                   ; Front page?
-(all-element-number [node])                 ; All element numbers
-
-;; HyTime
-(hytime-linkend)                            ; HyTime linkend
-
-;; String utilities
-(string-equiv? s1 s2 lang)                  ; Language-aware compare
-```
+- **Keywords** (3): `keyword?`, `keyword->string`, `string->keyword`
+- **Time** (6): `time`, `time->string`, `time<?`, `time>?`, `time<=?`, `time>=?`
+- **Language** (4): `language?`, `current-language`, `with-language`, `language`
+- **Style** (3): `style?`, `merge-style`, `map-constructor`
+- **Parsing**: `sgml-parse`
+- **Debug/error** (4): `error`, `external-procedure`, `read-entity`, `debug`
+- **Named node lists** (6): `named-node-list?`, `named-node`, `named-node-list-names`, `named-node-list-normalize`, `node-list-no-order`, `node-list-error`
+- **Page conditionals** (3): `if-first-page`, `if-front-page`, `all-element-number`
+- **HyTime**: `hytime-linkend`
+- **String utilities**: `string-equiv?`
 
 ---
 

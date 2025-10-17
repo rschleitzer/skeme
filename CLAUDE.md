@@ -68,7 +68,7 @@ Preserve the workflow in a maintainable form:
 - ✅ XML + DTD validation (libxml2)
 - ✅ OpenJade CLI-compatible (zero retraining)
 - ✅ Focus on code generation (not document formatting)
-- ✅ Drop SGML-as-spec overhead (use pure .scm files)
+- ✅ Use DSSSL XML wrappers with entity references (OpenJade compatible)
 
 ---
 
@@ -179,7 +179,7 @@ From OpenJade analysis, Dazzle needs:
 3. **Processing & output** (~20 primitives for text generation)
 4. **SGML backend concept** (simplified: only `entity` + `formatting-instruction` flow objects)
 5. **R5RS Scheme interpreter** (use Steel, not port)
-6. **Template file parser** (pure .scm files, no SGML wrapper)
+6. **Template file parser** (XML wrapper with entity references to .scm modules)
 
 **Key simplification**: User only generates plain text code files (`.java`, `.rs`, etc.), not styled documents. This eliminates ~30 primitives (quantities, colors, spacing) - implement as stubs.
 
@@ -373,6 +373,192 @@ clap = "4"                  # CLI argument parsing
 ```
 
 **Philosophy**: Minimal dependencies for easier packaging.
+
+---
+
+## Template File Format: XML Wrappers with Entity References
+
+**CRITICAL DESIGN DECISION:** Template format must be compatible with BOTH OpenJade AND Dazzle.
+
+### Why XML Wrappers with Entity References?
+
+**Steel Context Problem:**
+- Steel Scheme has **context isolation** issues with `(load ...)`
+- Each `(load ...)` creates a new evaluation context
+- Definitions from one loaded file are NOT visible to other loaded files
+- This breaks modular template organization
+
+**Solution: Entity-Based Concatenation (DSSSL tradition)**
+- Use XML/SGML entity references to include `.scm` modules
+- Parser (libxml2 for Dazzle, OpenSP for OpenJade) resolves entities
+- Scheme interpreter sees one unified program
+- All definitions visible across modules
+
+**This follows the DSSSL/OpenJade tradition** of using entity references for modular templates.
+
+### Dual-Compatibility Requirement
+
+**During migration, templates MUST work with both:**
+- ✅ **OpenJade** (existing, proven toolchain)
+- ✅ **Dazzle** (new, under development)
+
+Users need to switch back and forth during transition period.
+
+### Template Format
+
+**The format MUST use proper DSSSL structure for OpenJade compatibility:**
+
+```xml
+<?xml version="1.0"?>
+<!DOCTYPE style-sheet PUBLIC "-//James Clark//DTD DSSSL Style Sheet//EN" [
+<!ENTITY helpers SYSTEM "helpers.scm">
+<!ENTITY syntax  SYSTEM "syntax.scm">
+<!ENTITY parser  SYSTEM "parser.scm">
+<!ENTITY rules   SYSTEM "rules.scm">
+]>
+<style-sheet>
+<style-specification>
+&helpers;
+&syntax;
+&parser;
+&rules;
+</style-specification>
+</style-sheet>
+```
+
+**Key properties:**
+- ✅ Valid XML (Dazzle/libxml2 can parse)
+- ✅ Valid SGML (OpenJade/OpenSP can parse) - XML is SGML subset
+- ✅ Uses DSSSL DOCTYPE with PUBLIC identifier (OpenJade requires this)
+- ✅ Standard entity references (both parsers resolve identically)
+- ✅ `<style-sheet>` and `<style-specification>` elements (DSSSL structure)
+- ✅ No tool-specific extensions
+
+### Processing Flow
+
+**OpenJade:**
+1. OpenSP parses DSSSL style-sheet (SGML/XML)
+2. Resolves entity references (loads `.scm` files)
+3. Extracts Scheme code from `<style-specification>` element
+4. OpenJade's Scheme interpreter evaluates unified program
+
+**Dazzle:**
+1. libxml2 parses DSSSL style-sheet (XML)
+2. Resolves entity references (loads `.scm` files)
+3. Extracts Scheme code from `<style-specification>` element
+4. Steel interpreter evaluates unified program
+
+**Result:** Identical behavior in both tools.
+
+### Benefits
+
+**vs. inline CDATA format:**
+- ✅ Modular `.scm` files (not inline in wrapper)
+- ✅ CDATA sections only when needed (for XML-dangerous characters)
+- ✅ Cleaner organization (separate files for helpers, syntax, parser, etc.)
+- ✅ Still uses DSSSL structure (OpenJade compatible)
+
+**IMPORTANT: XML-Dangerous Characters in .scm Files**
+
+Scheme code may contain XML-problematic characters that require CDATA wrapping:
+- `<` (stago) - **DANGEROUS** - starts XML tag
+- `&` (ampersand) - **DANGEROUS** - starts entity reference
+- `>` (greater-than) - **NOT dangerous** - safe to use
+
+**Examples of dangerous content:**
+- Scheme predicates: `string<?`, `<=`, `<`
+- Generated code with `<`: `if (a < b)`, `List<String>`
+- Strings with `&`: `"foo & bar"`, `&entity;`
+- C# XML doc comments: `/// <summary>Checks if a < b</summary>`
+
+**Solution 1: Wrap entire .scm file in CDATA**
+```scheme
+<![CDATA[
+(define (compare a b)
+  (string<? a b))
+
+(define code
+  "/// <summary>Checks if a < b</summary>")
+]]>
+```
+
+**Solution 2: Wrap only critical sections in CDATA**
+```scheme
+(define (safe-function a b)
+  (string-append a b))
+
+(define (generate-method name)
+  (string-append
+<![CDATA[
+    "/// <summary>\n"
+    "/// Checks if a < b and handles foo & bar\n"
+    "/// </summary>\n"
+]]>
+    "public bool Compare(int a, int b) {\n"
+    "  return a < b;\n"
+    "}\n"))
+
+(define (another-safe-function)
+  (process-children))
+```
+
+**Choose based on your needs:**
+- If many `<` or `&` characters → Wrap entire file
+- If only a few critical sections → Wrap those sections only
+- If no `<` or `&` at all → No CDATA needed
+
+**Alternative: Single .scm file without XML wrapper**
+
+If you use a single `.scm` file directly (without XML wrapper), `<` and `&` are **not a problem** at all:
+```scheme
+;; pure-template.scm - no XML wrapper, no CDATA needed
+(define (compare a b)
+  (string<? a b))  ; < is just a character, not XML
+
+(define code
+  "/// <summary>Checks if a < b & c</summary>")  ; < and & are fine
+```
+
+**However:**
+- ❌ **NOT OpenJade compatible** - OpenJade requires DSSSL XML wrapper
+- ✅ **Perfect for Dazzle-only** - If you never need OpenJade
+
+**Recommendation:** Use XML wrapper with entity references for OpenJade/Dazzle dual compatibility during transition.
+
+### Migration Path
+
+**Old (OpenJade-only SGML format):**
+```sgml
+<!DOCTYPE STYLE-SHEET PUBLIC "-//James Clark//DTD DSSSL Style Sheet//EN" [
+<!ENTITY syntax SYSTEM "syntax.scm">
+]>
+<STYLE-SPECIFICATION>
+&syntax;
+</STYLE-SPECIFICATION>
+```
+
+**New (OpenJade + Dazzle compatible XML):**
+```xml
+<?xml version="1.0"?>
+<!DOCTYPE style-sheet PUBLIC "-//James Clark//DTD DSSSL Style Sheet//EN" [
+<!ENTITY syntax SYSTEM "syntax.scm">
+]>
+<style-sheet>
+<style-specification>
+&syntax;
+</style-specification>
+</style-sheet>
+```
+
+**Changes:**
+- Add XML declaration `<?xml version="1.0"?>` (required for XML)
+- Use lowercase `style-sheet` DOCTYPE (proper DSSSL format)
+- Keep PUBLIC identifier (OpenJade needs DSSSL DTD reference)
+- Add `<style-sheet>` wrapper element
+- Nest `<style-specification>` inside (lowercase)
+- Keep entity references (both parsers support)
+
+**The `.scm` files remain unchanged!** Only the wrapper needs updating.
 
 ### Project Structure
 

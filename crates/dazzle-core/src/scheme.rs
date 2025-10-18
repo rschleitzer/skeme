@@ -576,22 +576,52 @@ impl SchemeEngine {
     }
 
     /// Extract DSSSL code from XML style-sheet
-    /// Handles entity expansion automatically via libxml2
+    /// Provides minimal DSSSL DTD internally for entity expansion
     fn extract_dsssl_from_xml(&self, file_path: &std::path::Path) -> Result<String> {
-        use libxml::bindings::{xmlReadFile, xmlParserOption_XML_PARSE_NOENT, xmlParserOption_XML_PARSE_DTDLOAD};
+        use libxml::bindings::{
+            xmlReadMemory, xmlParserOption_XML_PARSE_NOENT, xmlParserOption_XML_PARSE_DTDLOAD,
+            xmlParserOption_XML_PARSE_RECOVER, xmlParserOption_XML_PARSE_NONET,
+        };
         use libxml::tree::Document;
         use libxml::xpath::Context;
-        use std::ffi::CString;
 
-        // Parse XML with entity substitution using xmlReadFile directly
-        let path_cstr = CString::new(file_path.to_str().unwrap())
-            .map_err(|_| anyhow::anyhow!("Invalid path"))?;
+        // Embedded minimal DSSSL DTD (XML syntax)
+        const DSSSL_DTD: &str = include_str!("dsssl.dtd");
+
+        // Write DTD to temp file
+        let dtd_path = std::env::temp_dir().join("dazzle-dsssl.dtd");
+        std::fs::write(&dtd_path, DSSSL_DTD)
+            .context("Failed to write temporary DSSSL DTD")?;
+
+        // Read the template file
+        let mut xml_content = std::fs::read_to_string(file_path)
+            .with_context(|| format!("Failed to read XML template: {}", file_path.display()))?;
+
+        // Inject SYSTEM identifier pointing to temp DTD
+        // FROM: <!DOCTYPE ... PUBLIC "..." [
+        // TO:   <!DOCTYPE ... PUBLIC "..." "file:///tmp/dazzle-dsssl.dtd" [
+        if let Some(start) = xml_content.find("PUBLIC \"-//James Clark//DTD DSSSL Style Sheet//EN\" [") {
+            let insert_after = "PUBLIC \"-//James Clark//DTD DSSSL Style Sheet//EN\"";
+            let insert_pos = start + insert_after.len();
+            let dtd_url = format!(" \"file://{}\"", dtd_path.display());
+            xml_content.insert_str(insert_pos, &dtd_url);
+        }
+
+        // Parse from memory with base URL for entity resolution
+        let xml_bytes = xml_content.as_bytes();
+        let base_url_cstr = std::ffi::CString::new(file_path.to_str().unwrap())
+            .map_err(|_| anyhow::anyhow!("Invalid file path"))?;
 
         let doc_ptr = unsafe {
-            xmlReadFile(
-                path_cstr.as_ptr(),
+            xmlReadMemory(
+                xml_bytes.as_ptr() as *const i8,
+                xml_bytes.len() as i32,
+                base_url_cstr.as_ptr(),  // Base URL for resolving relative entity paths
                 std::ptr::null(),
-                (xmlParserOption_XML_PARSE_NOENT | xmlParserOption_XML_PARSE_DTDLOAD) as i32,  // Enable entity substitution and DTD loading
+                (xmlParserOption_XML_PARSE_NOENT       // Substitute entities
+                | xmlParserOption_XML_PARSE_DTDLOAD     // Load DTD for entity declarations
+                | xmlParserOption_XML_PARSE_RECOVER     // Recover from errors
+                | xmlParserOption_XML_PARSE_NONET) as i32, // Don't fetch network resources
             )
         };
 
@@ -602,27 +632,27 @@ impl SchemeEngine {
         // Wrap in Document for safe handling (Document's Drop will free the doc)
         let doc = Document::new_ptr(doc_ptr);
 
-        // Use XPath to find <style-specification> or <STYLE-SPECIFICATION> element (case-insensitive)
+        // Use XPath to find <STYLE-SPECIFICATION> or <style-specification> element
         let context = Context::new(&doc)
             .map_err(|_| anyhow::anyhow!("Failed to create XPath context"))?;
 
-        // Try lowercase first
+        // Try uppercase first (OpenJade standard)
         let mut result = context
-            .evaluate("//style-specification")
+            .evaluate("//STYLE-SPECIFICATION")
             .map_err(|_| anyhow::anyhow!("XPath evaluation failed"))?;
 
         let mut nodes = result.get_nodes_as_vec();
 
-        // If not found, try uppercase (OpenJade style)
+        // If not found, try lowercase (XML convention)
         if nodes.is_empty() {
             result = context
-                .evaluate("//STYLE-SPECIFICATION")
+                .evaluate("//style-specification")
                 .map_err(|_| anyhow::anyhow!("XPath evaluation failed"))?;
             nodes = result.get_nodes_as_vec();
         }
 
         if nodes.is_empty() {
-            anyhow::bail!("No <style-specification> or <STYLE-SPECIFICATION> element found in XML template");
+            anyhow::bail!("No <STYLE-SPECIFICATION> or <style-specification> element found in XML template");
         }
 
         // Extract text content (entities now expanded by libxml2)

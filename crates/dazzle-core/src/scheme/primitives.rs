@@ -1641,6 +1641,85 @@ pub fn prim_procedure_p(args: &[Value]) -> PrimitiveResult {
 }
 
 // =============================================================================
+// I/O and Utility Primitives (R4RS / DSSSL)
+// =============================================================================
+
+/// (error message obj ...) → does not return
+///
+/// Signals an error with the given message and objects.
+/// In DSSSL/OpenJade, this is used for runtime error reporting.
+///
+/// **DSSSL**: Extension (OpenJade primitive)
+pub fn prim_error(args: &[Value]) -> PrimitiveResult {
+    if args.is_empty() {
+        return Err("error: requires at least 1 argument".to_string());
+    }
+
+    let message = match &args[0] {
+        Value::String(s) => s.to_string(),
+        Value::Symbol(s) => s.to_string(),
+        other => format!("{:?}", other),
+    };
+
+    // Collect additional objects
+    let mut full_message = message;
+    for arg in &args[1..] {
+        full_message.push_str(&format!(" {:?}", arg));
+    }
+
+    Err(full_message)
+}
+
+/// (display obj) → unspecified
+///
+/// Writes obj to the current output port (stdout).
+/// Used for debugging and output in DSSSL templates.
+///
+/// **R4RS**: Required procedure
+pub fn prim_display(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("display requires exactly 1 argument".to_string());
+    }
+
+    let output = match &args[0] {
+        Value::String(s) => s.to_string(),
+        Value::Char(c) => c.to_string(),
+        other => format!("{:?}", other),
+    };
+
+    print!("{}", output);
+    Ok(Value::Unspecified)
+}
+
+/// (newline) → unspecified
+///
+/// Writes a newline to the current output port (stdout).
+///
+/// **R4RS**: Required procedure
+pub fn prim_newline(args: &[Value]) -> PrimitiveResult {
+    if !args.is_empty() {
+        return Err("newline requires 0 arguments".to_string());
+    }
+
+    println!();
+    Ok(Value::Unspecified)
+}
+
+/// (write obj) → unspecified
+///
+/// Writes obj to the current output port in a machine-readable format.
+///
+/// **R4RS**: Required procedure
+pub fn prim_write(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("write requires exactly 1 argument".to_string());
+    }
+
+    print!("{:?}", args[0]);
+    Ok(Value::Unspecified)
+}
+
+// =============================================================================
 // Registration
 // =============================================================================
 
@@ -1742,6 +1821,14 @@ pub fn register_boolean_primitives(env: &gc::Gc<crate::scheme::environment::Envi
     env.define("eqv?", Value::primitive("eqv?", prim_eqv_p));
     env.define("eq?", Value::primitive("eq?", prim_eq_p));
     env.define("procedure?", Value::primitive("procedure?", prim_procedure_p));
+}
+
+/// Register all I/O and utility primitives in an environment
+pub fn register_io_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    env.define("error", Value::primitive("error", prim_error));
+    env.define("display", Value::primitive("display", prim_display));
+    env.define("newline", Value::primitive("newline", prim_newline));
+    env.define("write", Value::primitive("write", prim_write));
 }
 
 // =============================================================================
@@ -2383,5 +2470,65 @@ mod tests {
         // Non-procedures
         assert!(matches!(prim_procedure_p(&[Value::integer(42)]).unwrap(), Value::Bool(false)));
         assert!(matches!(prim_procedure_p(&[Value::string("hello".to_string())]).unwrap(), Value::Bool(false)));
+    }
+
+    // =========================================================================
+    // I/O and utility primitive tests
+    // =========================================================================
+
+    #[test]
+    fn test_error() {
+        // Error with string message
+        let result = prim_error(&[Value::string("test error".to_string())]);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "test error");
+
+        // Error with symbol message
+        let result = prim_error(&[Value::symbol("error-symbol")]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("error-symbol"));
+
+        // Error with additional objects
+        let result = prim_error(&[
+            Value::string("error:".to_string()),
+            Value::integer(42),
+            Value::string("foo".to_string()),
+        ]);
+        assert!(result.is_err());
+        let msg = result.unwrap_err();
+        assert!(msg.contains("error:"));
+        assert!(msg.contains("42"));
+    }
+
+    #[test]
+    fn test_display() {
+        // Display returns unspecified
+        let result = prim_display(&[Value::string("test".to_string())]).unwrap();
+        assert!(matches!(result, Value::Unspecified));
+
+        let result = prim_display(&[Value::integer(42)]).unwrap();
+        assert!(matches!(result, Value::Unspecified));
+
+        let result = prim_display(&[Value::Char('x')]).unwrap();
+        assert!(matches!(result, Value::Unspecified));
+    }
+
+    #[test]
+    fn test_newline() {
+        let result = prim_newline(&[]).unwrap();
+        assert!(matches!(result, Value::Unspecified));
+
+        // Should error with arguments
+        let result = prim_newline(&[Value::integer(1)]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_write() {
+        let result = prim_write(&[Value::string("test".to_string())]).unwrap();
+        assert!(matches!(result, Value::Unspecified));
+
+        let result = prim_write(&[Value::integer(42)]).unwrap();
+        assert!(matches!(result, Value::Unspecified));
     }
 }

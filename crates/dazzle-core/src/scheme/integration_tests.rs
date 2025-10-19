@@ -27,6 +27,7 @@ mod tests {
         primitives::register_number_primitives(&env);
         primitives::register_string_primitives(&env);
         primitives::register_boolean_primitives(&env);
+        primitives::register_io_primitives(&env);
 
         // Eval
         let mut evaluator = Evaluator::new();
@@ -924,5 +925,46 @@ mod tests {
         "#;
         let result = eval_string(code);
         assert!(result.is_string());
+    }
+
+    // =========================================================================
+    // I/O and utility primitives
+    // =========================================================================
+
+    #[test]
+    fn test_eval_display() {
+        let result = eval_string(r#"(display "hello")"#);
+        assert!(matches!(result, Value::Unspecified));
+
+        let result = eval_string("(display 42)");
+        assert!(matches!(result, Value::Unspecified));
+    }
+
+    #[test]
+    fn test_eval_newline() {
+        let result = eval_string("(newline)");
+        assert!(matches!(result, Value::Unspecified));
+    }
+
+    #[test]
+    fn test_eval_write() {
+        let result = eval_string(r#"(write "test")"#);
+        assert!(matches!(result, Value::Unspecified));
+
+        let result = eval_string("(write '(1 2 3))");
+        assert!(matches!(result, Value::Unspecified));
+    }
+
+    #[test]
+    fn test_eval_display_sequence() {
+        // Test sequence of display calls with begin
+        let code = r#"
+            (begin
+              (display "Hello, ")
+              (display "World!")
+              (newline))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Unspecified));
     }
 }

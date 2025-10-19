@@ -164,8 +164,6 @@ pub trait FotBuilder: Debug {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_trait_defined() {
         // This test just ensures the trait compiles

@@ -29,10 +29,12 @@
 
 pub mod fot;
 pub mod grove;
+pub mod scheme;
 
 // Re-export key types for convenience
 pub use fot::FotBuilder;
 pub use grove::{Grove, Node, NodeList};
+pub use scheme::{Environment, PairData, Procedure, Value};
 
 /// Dazzle version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

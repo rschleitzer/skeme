@@ -166,8 +166,6 @@ pub trait Grove: Debug {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // These tests will be implemented once we have a concrete grove implementation
     // For now, they serve as documentation of expected behavior
 

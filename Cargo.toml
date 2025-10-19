@@ -21,7 +21,7 @@ categories = ["command-line-utilities", "development-tools", "template-engine"]
 
 [workspace.dependencies]
 # Garbage collection for Scheme interpreter
-gc = "0.5"
+gc = { version = "0.5", features = ["derive"] }
 
 # XML parsing with DTD validation
 libxml = "0.3"

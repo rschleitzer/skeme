@@ -27,7 +27,12 @@
 pub mod environment;
 pub mod evaluator;
 pub mod parser;
+pub mod primitives;
 pub mod value;
+
+// Integration tests (cfg(test) only)
+#[cfg(test)]
+mod integration_tests;
 
 // Re-export key types for convenience
 pub use environment::Environment;

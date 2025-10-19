@@ -2331,6 +2331,80 @@ pub fn prim_format_number_list(args: &[Value]) -> PrimitiveResult {
 }
 
 // =============================================================================
+// Grove Query Primitives (DSSSL)
+// =============================================================================
+//
+// These primitives provide XML tree navigation and querying.
+// They form the core of DSSSL's grove model for document processing.
+//
+// **Implementation Status**: Basic API defined. Full grove integration
+// with libxml2 will connect these to actual XML documents.
+
+/// (node-list? obj) → boolean
+///
+/// Returns #t if obj is a node-list.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_node_list_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("node-list? requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(matches!(args[0], Value::NodeList)))
+}
+
+/// (empty-node-list) → node-list
+///
+/// Returns an empty node-list.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_empty_node_list(args: &[Value]) -> PrimitiveResult {
+    if !args.is_empty() {
+        return Err("empty-node-list requires no arguments".to_string());
+    }
+
+    Ok(Value::NodeList)
+}
+
+/// (node-list-empty? nl) → boolean
+///
+/// Returns #t if the node-list is empty.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_node_list_empty_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("node-list-empty? requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::NodeList => {
+            // For now, NodeList is just a placeholder - always empty
+            Ok(Value::bool(true))
+        }
+        _ => Err(format!("node-list-empty?: not a node-list: {:?}", args[0])),
+    }
+}
+
+/// (node-list-length nl) → integer
+///
+/// Returns the number of nodes in the node-list.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_node_list_length(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("node-list-length requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::NodeList => {
+            // For now, NodeList is just a placeholder - always empty
+            Ok(Value::integer(0))
+        }
+        _ => Err(format!("node-list-length: not a node-list: {:?}", args[0])),
+    }
+}
+
+// =============================================================================
 // Registration
 // =============================================================================
 
@@ -2478,6 +2552,14 @@ pub fn register_dsssl_type_primitives(env: &gc::Gc<crate::scheme::environment::E
 pub fn register_format_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
     env.define("format-number", Value::primitive("format-number", prim_format_number));
     env.define("format-number-list", Value::primitive("format-number-list", prim_format_number_list));
+}
+
+/// Register grove query primitives in an environment
+pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    env.define("node-list?", Value::primitive("node-list?", prim_node_list_p));
+    env.define("empty-node-list", Value::primitive("empty-node-list", prim_empty_node_list));
+    env.define("node-list-empty?", Value::primitive("node-list-empty?", prim_node_list_empty_p));
+    env.define("node-list-length", Value::primitive("node-list-length", prim_node_list_length));
 }
 
 // =============================================================================
@@ -3522,5 +3604,48 @@ mod tests {
         } else {
             panic!("Expected string");
         }
+    }
+
+    // =========================================================================
+    // Grove query primitive tests
+    // =========================================================================
+
+    #[test]
+    fn test_node_list_p() {
+        // NodeList is a node-list
+        assert!(matches!(prim_node_list_p(&[Value::NodeList]).unwrap(), Value::Bool(true)));
+
+        // Other types are not node-lists
+        assert!(matches!(prim_node_list_p(&[Value::integer(1)]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_node_list_p(&[Value::string("test".to_string())]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_node_list_p(&[Value::Nil]).unwrap(), Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_empty_node_list() {
+        let result = prim_empty_node_list(&[]).unwrap();
+        assert!(matches!(result, Value::NodeList));
+    }
+
+    #[test]
+    fn test_node_list_empty_p() {
+        // Empty node-list is empty
+        let nl = prim_empty_node_list(&[]).unwrap();
+        let result = prim_node_list_empty_p(&[nl]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        // Non-node-list should error
+        assert!(prim_node_list_empty_p(&[Value::integer(1)]).is_err());
+    }
+
+    #[test]
+    fn test_node_list_length() {
+        // Empty node-list has length 0
+        let nl = prim_empty_node_list(&[]).unwrap();
+        let result = prim_node_list_length(&[nl]).unwrap();
+        assert!(matches!(result, Value::Integer(0)));
+
+        // Non-node-list should error
+        assert!(prim_node_list_length(&[Value::integer(1)]).is_err());
     }
 }
